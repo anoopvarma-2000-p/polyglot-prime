@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout">
+
+<head>
+    <script src='https://unpkg.com/htmx.org/dist/htmx.min.js'></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <title>Welcome</title>
+    <style>
+        .hanging-indent {
+            padding-left: 1.5rem;
+            text-indent: -1.5rem;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100">
+    <div layout:fragment="content" class="flex flex-col items-center justify-center p-4 w-full max-w-9xl">
+        <img src="/tech-by-design_full-color.svg" class="mb-4 h-auto max-w-xs" />
+        <div class="prose bg-white p-8 w-full max-w-6xl">
+            <h1 class="text-3xl font-bold mb-4 text-center">Tech by Design</h1>
+            <h2 class="text-3xl font-bold mb-4 text-center">An error occurred!</h2>
+
+            <p class="mb-4 text-center">Status: <span th:text="${status}"></span></p>
+            <p class="mb-4 text-center">Error: <span th:text="${error}"></span></p>
+            <p class="mb-4 text-center">Message: <span th:text="${message}"></span></p>
+        </div>
+    </div>
+</body>
+
+</html>

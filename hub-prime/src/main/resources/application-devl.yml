@@ -1,3 +1,7 @@
+server:
+  allowedHosts:
+    - https://synthetic.fhir.api.devl.techbd.org
+    
 management:
   endpoints:
     enabled-by-default: true

@@ -15,6 +15,11 @@ org:
               # Wait time to receive response from scoring engine
               timeout: 180
 
+server:
+  allowedHosts:
+    - localhost:8080
+    - 127.0.0.1:8080
+
 management:
   endpoints:
     enabled-by-default: true

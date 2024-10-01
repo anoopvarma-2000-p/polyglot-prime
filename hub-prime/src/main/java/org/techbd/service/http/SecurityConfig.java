@@ -54,8 +54,14 @@ public class SecurityConfig {
                 .permitAll())
                 .csrf(AbstractHttpConfigurer::disable)
                 .addFilterAfter(authzFilter, UsernamePasswordAuthenticationFilter.class);
-        // allow us to show our own content in IFRAMEs (e.g. Swagger, etc.)
-        http.headers(headers -> headers.frameOptions(frameOptions -> frameOptions.sameOrigin()));
+
+        http.headers(headers -> headers
+                .frameOptions(frameOptions -> frameOptions.sameOrigin()) // allow us to show our own content in IFRAMEs (e.g. Swagger, etc.)
+                // Configure HTTP Strict Transport Security (HSTS)
+                .httpStrictTransportSecurity(hsts -> hsts
+                .maxAgeInSeconds(86400) // 1 day max age
+                .includeSubDomains(true) // Apply to subdomains
+                ));
         return http.build();
     }
 
