@@ -104,19 +104,40 @@
             </dl>
         </div>
 
-        <!-- <div class="mt-12 w-full grid grid-cols-4 gap-8" id="dashboard-container">
-            <div th:replace="fragments/interactions :: serverTextStat"></div>
-        </div>
-        <div class="mt-12 w-full grid grid-cols-2 gap-8">
-            <div>
-                <h3 class="text-xl font-bold mb-4">FHIR Submission Summary</h3>
-                <pre class=" bg-white p-4 rounded-lg shadow-md">
-                    <dl id="pie-chart" class=" pie-chart-item  flex justify-center items-center pt-12"> 
-                    </dl>
-                </pre>
+        <div class="text-center">Submission Summary for the last 7 days</div>
+        <div class="mt-12 w-full grid grid-cols-4 gap-6" id="dashboard-container">
 
+            <div id="dashboard-container-healthelink">
+                <div class="123"
+                    th:replace="~{fragments/interactions :: serverTextStat('HEALTHeLINK', @{/dashboard/stat/fhir/fhir-submission-summary/healthelink.html})}">
+                    <img src="/fidget-spinner-64x64-ani.gif"></img>
+                </div>
             </div>
-        </div> -->
+            <div id="dashboard-container-healtheconn">
+                <div
+                    th:replace="~{fragments/interactions :: serverTextStat('healtheconnections', @{/dashboard/stat/fhir/fhir-submission-summary/healtheconn.html})}">
+                    <img src="/fidget-spinner-64x64-ani.gif"></img>
+                </div>
+            </div>
+            <div id="dashboard-container-healthix">
+                <div
+                    th:replace="~{fragments/interactions :: serverTextStat('Healthix', @{/dashboard/stat/fhir/fhir-submission-summary/healthix.html})}">
+                    <img src="/fidget-spinner-64x64-ani.gif"></img>
+                </div>
+            </div>
+            <div id="dashboard-container-grrhio">
+                <div
+                    th:replace="~{fragments/interactions :: serverTextStat('Rochester', @{/dashboard/stat/fhir/fhir-submission-summary/grrhio.html})}">
+                    <img src="/fidget-spinner-64x64-ani.gif"></img>
+                </div>
+            </div>
+            <div id="dashboard-container-hixny">
+                <div
+                    th:replace="~{fragments/interactions :: serverTextStat('HixNY', @{/dashboard/stat/fhir/fhir-submission-summary/hixny.html})}">
+                    <img src="/fidget-spinner-64x64-ani.gif"></img>
+                </div>
+            </div>
+        </div>
 
         <div class="mt-12 w-full grid grid-cols-1 gap-8">
             <div>
@@ -146,7 +167,7 @@
             </div>
             <div>
                 <h3 class="text-xl font-bold mb-4">Production (FHIR)</h3>
-                <pre class="mermaid bg-white p-4 rounded-lg shadow-md"> 
+                <pre class="mermaid bg-white p-4 rounded-lg shadow-md">
                 sequenceDiagram
                     participant RC as RC
                     participant SCN as SCN
@@ -306,39 +327,6 @@
                 }
 
             });
-            // Optional: Use JavaScript to fetch data dynamically if needed
-            async function fetchRecentData() {
-                try {
-                    const response = await fetch(`/dashboard/stat/fhir/fhir-submission-summary`);
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! Status: ${response.status}`);
-                    }
-                    const data = await response.text();
-                    document.getElementById('dashboard-container').innerHTML = data;
-                    const pieChartData = [
-                        {
-                            count: document.getElementById("totalSubmissionsP") ? document.getElementById("totalSubmissionsP").textContent : 0,
-                            label: "Total Submissions"
-                        },
-                        {
-                            count: document.getElementById("pendingSubmissionsP") ? document.getElementById("pendingSubmissionsP").textContent : 0,
-                            label: "Pending Submissions"
-                        },
-                        {
-                            count: document.getElementById("acceptedSubmissionsP") ? document.getElementById("acceptedSubmissionsP").textContent : 0,
-                            label: "Accepted Submissions"
-                        },
-                        {
-                            count: document.getElementById("rejectedSubmissionsP") ? document.getElementById("rejectedSubmissionsP").textContent : 0,
-                            label: "Rejected Submissions"
-                        }
-                    ];
-                    createPieChart(pieChartData);
-                } catch (error) {
-                    console.error('Error fetching recent data:', error);
-                }
-            }
-
 
             // Function to replace text with a link
             // Function to add a click event to specific text elements in the diagram
@@ -356,70 +344,6 @@
                 });
             }
 
-            // Example usage on page load or user interaction
-            // window.onload = function () {
-            //     fetchRecentData(); // Fetch data for the last 7 days
-            // }
-            function createPieChart(interactions) {
-                const width = 500;  // Further increase width
-                const height = 500;  // Further increase height
-                const radius = Math.min(width, height) / 2;
-
-                const color = d3.scaleOrdinal()
-                    .domain(interactions.map(d => d.label))
-                    .range(d3.schemeCategory10);
-
-                const pie = d3.pie()
-                    .value(d => d.count);
-
-                const arc = d3.arc()
-                    .innerRadius(0)
-                    .outerRadius(radius);
-
-                const svg = d3.select("#pie-chart")
-                    .append("svg")
-                    .attr("class", " align-middle w-[70%] mt-[-45px]")  // Add Tailwind classes for width and height
-                    .attr("viewBox", `0 0 ${width + 300} ${height}`)  // Further increase width to make room for the legend
-                    .append("g")
-                    .attr("transform", `translate(${width / 2},${height / 2})`);
-
-                svg.selectAll("path")
-                    .data(pie(interactions))
-                    .enter().append("path")
-                    .attr("fill", d => color(d.data.label))
-                    .attr("d", arc)
-                    .append("title")
-                    .text(d => `${d.data.label}: ${d.data.count}`);
-
-                // Add legend
-                const legend = svg.append("g")
-                    .attr("transform", `translate(${radius + 50}, -${height / 2})`);  // Move legend further to the right
-
-                const legendRectSize = 20;  // Increase legend rectangle size
-                const legendSpacing = 8;    // Increase legend spacing
-
-                const legendItems = legend.selectAll('.legend-item')
-                    .data(interactions)
-                    .enter()
-                    .append('g')
-                    .attr('class', 'legend-item')
-                    .attr('transform', (d, i) => `translate(0, ${i * (legendRectSize + legendSpacing)})`);
-
-                legendItems.append('rect')
-                    .attr('width', legendRectSize)
-                    .attr('height', legendRectSize)
-                    .attr('fill', d => color(d.label))
-                    .attr('stroke', d => color(d.label));
-
-                legendItems.append('text')
-                    .attr('x', legendRectSize + legendSpacing)
-                    .attr('y', legendRectSize - legendSpacing)
-                    .style('font-size', '14px')  // Increase font size
-                    .style('font-family', 'sans-serif')  // Optional: set font family
-                    .text(d => d.label)
-                    .attr('dy', '0.35em');  // Adjust text vertical alignment
-            }
-            /*]]>*/
         </script>
     </div>
 

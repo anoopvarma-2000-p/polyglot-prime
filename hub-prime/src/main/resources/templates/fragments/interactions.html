@@ -1,34 +1,153 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
+
 <head>
     <meta charset="UTF-8">
     <title>Dashboard Fragment</title>
+
+    <script src="https://d3js.org/d3.v7.min.js"></script>
 </head>
-<body th:fragment="serverTextStat">
-       
-                   <!-- Total Submissions Widget -->
-                <div class="bg-white p-6 rounded-lg shadow-md">
-                    <h2 class="text-xl font-semibold mb-2">Total Submissions</h2>
-                    <p id="totalSubmissionsP" class="text-4xl font-bold" th:text="${totalSubmissions}">0</p>
-                </div>
-    
-                <!-- Pending Submissions Widget -->
-                <div class="bg-white p-6 rounded-lg shadow-md">
-                    <h2 class="text-xl font-semibold mb-2">Pending Submissions</h2>
-                    <p id="pendingSubmissionsP" class="text-4xl font-bold" th:text="${pendingSubmissions}">0</p>
-                </div>
-    
-                <!-- Accepted Submissions Widget -->
-                <div class="bg-white p-6 rounded-lg shadow-md">
-                    <h2 class="text-xl font-semibold mb-2">Accepted Submissions</h2>
-                    <p id="acceptedSubmissionsP" class="text-4xl font-bold" th:text="${acceptedSubmissions}">0</p>
-                </div>
-    
-                <!-- Rejected Submissions Widget -->
-                <div class="bg-white p-6 rounded-lg shadow-md">
-                    <h2 class="text-xl font-semibold mb-2">Rejected Submissions</h2>
-                    <p id="rejectedSubmissionsP" class="text-4xl font-bold" th:text="${rejectedSubmissions}">0</p>
-                </div>
-         
+
+<body th:fragment="serverTextStat(title, hxGet)">
+
+    <div th:attr="hx-get=@{${hxGet}}" hx-trigger="load">
+
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <dt class="truncate text-sm font-medium text-gray-500" th:text="${tenantId}">Widget Title</dt>
+
+            <dt class="text font-semibold mb-2">Total Submissions</dt>
+            <dd th:id="'totalSubmissionsP-' + ${tenantId}"
+                class="mt-1 text-3xl font-semibold tracking-tight text-gray-900" th:text="${totalSubmissions}">0</dd>
+
+            <dt class="text font-semibold mb-2">Pending Submissions</dt>
+            <dd th:id="'pendingSubmissionsP-' + ${tenantId}"
+                class="mt-1 text-3xl font-semibold tracking-tight text-gray-900" th:text="${pendingSubmissions}">0</dd>
+
+            <dt class="text font-semibold mb-2">Accepted Submissions</dt>
+            <dd th:id="'acceptedSubmissionsP-' + ${tenantId}"
+                class="mt-1 text-3xl font-semibold tracking-tight text-gray-900" th:text="${acceptedSubmissions}">0</dd>
+
+            <dt class="text font-semibold mb-2">Rejected Submissions</dt>
+            <dd th:id="'rejectedSubmissionsP-' + ${tenantId}"
+                class="mt-1 text-3xl font-semibold tracking-tight text-gray-900" th:text="${rejectedSubmissions}">0</dd>
+
+            <dt class="text font-semibold mb-2">Rejection Rate</dt>
+            <dd th:id="'rejectionRateP-' + ${tenantId}"
+                class="mt-1 text-3xl font-semibold tracking-tight text-gray-900">
+                <span th:text="${rejectionRate}">0</span>
+                <span class="text-sm font-normal">%</span>
+            </dd>
+
+            <div class="mt-12 w-full">
+                <pre class=" bg-white p-4 rounded-lg shadow-md">
+                    <dl th:id="'pie-chart-' + ${tenantId}" class=" pie-chart-item  flex justify-center items-center pt-12" style="width: 500px;">
+                    </dl>
+                </pre>
+            </div>
+        </div>
+
+    </div>
+
+    <script th:inline="javascript">
+        function call(tId) {
+            tId = tId.replace(/^"|"$/g, '');
+
+            // Retrieve the Thymeleaf attributes
+            const totalSubmissions = parseInt([[${ totalSubmissions }]] || 0);
+            const pendingSubmissions = parseInt([[${ pendingSubmissions }]] || 0);
+            const acceptedSubmissions = parseInt([[${ acceptedSubmissions }]] || 0);
+            const rejectedSubmissions = parseInt([[${ rejectedSubmissions }]] || 0);
+            const chartContainer = document.getElementById(`pie-chart-${tId}`);
+
+            // Check if all the values are greater than zero
+            if (totalSubmissions > 0 || pendingSubmissions > 0 || acceptedSubmissions > 0 || rejectedSubmissions > 0) {
+                chartContainer.style.display = 'block';
+                const pieChartData = [
+                    // {
+                    //     count: totalSubmissions,
+                    //     label: "Total Submissions"
+                    // },
+                    {
+                        count: pendingSubmissions,
+                        label: "Pending Submissions"
+                    },
+                    {
+                        count: acceptedSubmissions,
+                        label: "Accepted Submissions"
+                    },
+                    {
+                        count: rejectedSubmissions,
+                        label: "Rejected Submissions"
+                    }
+                ];
+
+                createPieChart(pieChartData, tId);
+            } else {
+                chartContainer.style.display = 'none';
+            }
+        }
+
+        call('[[${tenantId}]]');
+
+        function createPieChart(interactions, tId) {
+            const width = 75;
+            const height = 75;
+            const radius = Math.min(width, height) / 2;
+
+            const color = d3.scaleOrdinal()
+                .domain(interactions.map(d => d.label))
+                .range(d3.schemeCategory10);
+
+            const pie = d3.pie()
+                .value(d => d.count);
+
+            const arc = d3.arc()
+                .innerRadius(0)
+                .outerRadius(radius);
+
+            const svg = d3.select(`#pie-chart-${tId}`)
+                .append("svg")
+                .attr("class", "align-middle w-[70%] mt-[-45px]")
+                .attr("viewBox", `0 0 ${width + 300} ${height}`)
+                .append("g")
+                .attr("transform", `translate(${width / 2},${height / 2})`);
+
+            svg.selectAll("path")
+                .data(pie(interactions))
+                .enter().append("path")
+                .attr("fill", d => color(d.data.label))
+                .attr("d", arc)
+                .append("title")
+                .text(d => `${d.data.label}: ${d.data.count}`);
+
+            const legend = svg.append("g")
+                .attr("transform", `translate(${radius + 50}, -${height / 2})`);
+
+            const legendRectSize = 8;
+            const legendSpacing = 4;
+
+            const legendItems = legend.selectAll('.legend-item')
+                .data(interactions)
+                .enter()
+                .append('g')
+                .attr('class', 'legend-item')
+                .attr('transform', (d, i) => `translate(0, ${i * (legendRectSize + legendSpacing)})`);
+
+            legendItems.append('rect')
+                .attr('width', legendRectSize)
+                .attr('height', legendRectSize)
+                .attr('fill', d => color(d.label))
+                .attr('stroke', d => color(d.label));
+
+            legendItems.append('text')
+                .attr('x', legendRectSize + legendSpacing)
+                .attr('y', legendRectSize - legendSpacing)
+                .style('font-size', '10px')
+                .style('font-family', 'sans-serif')
+                .text(d => d.label)
+                .attr('dy', '0.35em');
+        }
+    </script>
 </body>
+
 </html>

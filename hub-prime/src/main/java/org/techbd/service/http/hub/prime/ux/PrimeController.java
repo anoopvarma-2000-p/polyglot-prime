@@ -35,6 +35,7 @@ import lib.aide.tabular.JooqRowsSupplier;
 @Controller
 @Tag(name = "Tech by Design Hub UX API")
 public class PrimeController {
+
     private static final Logger LOG = LoggerFactory.getLogger(PrimeController.class.getName());
 
     private final UdiPrimeJpaConfig udiPrimeJpaConfig;
@@ -66,15 +67,15 @@ public class PrimeController {
     }
 
     @GetMapping(value = "/admin/cache/tenant-sftp-egress-content/clear")
-    @CacheEvict(value = { SftpManager.TENANT_EGRESS_CONTENT_CACHE_KEY,
-            SftpManager.TENANT_EGRESS_SESSIONS_CACHE_KEY }, allEntries = true)
+    @CacheEvict(value = {SftpManager.TENANT_EGRESS_CONTENT_CACHE_KEY,
+        SftpManager.TENANT_EGRESS_SESSIONS_CACHE_KEY}, allEntries = true)
     public ResponseEntity<?> emptyTenantEgressCacheOnDemand() {
         LOG.info("emptying tenant-sftp-egress-content (on demand)");
         return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body("emptying tenant-sftp-egress-content");
     }
 
     @GetMapping(value = "/dashboard/stat/sftp/most-recent-egress/{tenantId}.{extension}", produces = {
-            "application/json", "text/html" })
+        "application/json", "text/html"})
     public ResponseEntity<?> handleRequest(@PathVariable String tenantId, @PathVariable String extension) {
         final var account = sftpManager.configuredTenant(tenantId);
         if (account.isPresent()) {
@@ -108,7 +109,7 @@ public class PrimeController {
     }
 
     @GetMapping(value = "/dashboard/stat/fhir/most-recent/{tenantId}.{extension}", produces = {
-            "application/json", "text/html" })
+        "application/json", "text/html"})
     public ResponseEntity<?> handleFHRequest(@PathVariable String tenantId, @PathVariable String extension) {
         String schemaName = "techbd_udi_ingress";
         String viewName = "interaction_recent_fhir";
@@ -169,22 +170,22 @@ public class PrimeController {
 
         // Define ranges in seconds for different time intervals
         long[] rangesInSeconds = {
-                3600 * 24 * 365, // years
-                3600 * 24 * 30, // months
-                3600 * 24 * 7, // weeks
-                3600 * 24, // days
-                3600, // hours
-                60 // minutes
+            3600 * 24 * 365, // years
+            3600 * 24 * 30, // months
+            3600 * 24 * 7, // weeks
+            3600 * 24, // days
+            3600, // hours
+            60 // minutes
         };
 
         // Corresponding labels for each range
         String[] rangeLabels = {
-                "year",
-                "month",
-                "week",
-                "day",
-                "hour",
-                "minute"
+            "year",
+            "month",
+            "week",
+            "day",
+            "hour",
+            "minute"
         };
 
         // Formatter for displaying relative time
@@ -219,35 +220,43 @@ public class PrimeController {
         return estDateTime.format(formatter);
     }
 
-    @GetMapping(value = "/dashboard/stat/fhir/fhir-submission-summary", produces = "text/html")
-    public String fetchFHIRsubmissionSummary(Model model) {
+    @GetMapping(value = "/dashboard/stat/fhir/fhir-submission-summary/{tenantId}.{extension}", produces = "text/html")
+    public String fetchFHIRsubmissionSummary(Model model, @PathVariable String tenantId, @PathVariable String extension) {
         String schemaName = "techbd_udi_ingress";
         String viewName = "fhir_submission_summary";
         final String defaultValue = "0";
+        String tenantName = "";
         String totalSubmissions = defaultValue;
         String pendingSubmissions = defaultValue;
         String acceptedSubmissions = defaultValue;
         String rejectedSubmissions = defaultValue;
+        String rejectionRate = defaultValue;
         try {
-            final var typableTable = JooqRowsSupplier.TypableTable.fromTablesRegistry(Tables.class, schemaName,
-                    viewName);
+            final var typableTable = JooqRowsSupplier.TypableTable.fromTablesRegistry(Tables.class, schemaName, viewName);
+
             List<Map<String, Object>> fhirSubmission = udiPrimeJpaConfig.dsl().selectFrom(typableTable.table())
+                    .where(DSL.upper(typableTable.column("tenant_id").cast(String.class)).eq(tenantId.toUpperCase()))
                     .fetch()
                     .intoMaps();
             if (CollectionUtils.isNotEmpty(fhirSubmission)) {
                 Map<String, Object> data = fhirSubmission.get(0);
+                tenantName = data.getOrDefault("tenant_name", defaultValue).toString();
                 totalSubmissions = data.getOrDefault("total_submissions", defaultValue).toString();
                 pendingSubmissions = data.getOrDefault("pending_submissions", defaultValue).toString();
                 acceptedSubmissions = data.getOrDefault("accepted_submissions", defaultValue).toString();
                 rejectedSubmissions = data.getOrDefault("rejected_submissions", defaultValue).toString();
+                rejectionRate = data.getOrDefault("rejection_rate", defaultValue).toString();
             }
         } catch (Exception e) {
             LOG.error("Error fetching FHIR interactions", e);
         }
+        model.addAttribute("tenantId", tenantId);
         model.addAttribute("totalSubmissions", totalSubmissions);
         model.addAttribute("pendingSubmissions", pendingSubmissions);
         model.addAttribute("acceptedSubmissions", acceptedSubmissions);
         model.addAttribute("rejectedSubmissions", rejectedSubmissions);
+        model.addAttribute("rejectionRate", rejectionRate);
+        
         return "fragments/interactions :: serverTextStat";
     }
 
@@ -264,7 +273,7 @@ public class PrimeController {
         // Query the view and fetch the results
         List<Map<String, Object>> fhirSubmission = udiPrimeJpaConfig.dsl().selectFrom(typableTable.table())
                 .fetch()
-                .intoMaps(); 
+                .intoMaps();
         // Check if data is available
         if (fhirSubmission != null && !fhirSubmission.isEmpty()) {
             Map<String, Object> data = fhirSubmission.get(0);
@@ -293,13 +302,13 @@ public class PrimeController {
             interactions.add(new InteractionData("healthelink_scoring_engine_submission_passed",
                     getSafeIntegerValue(data.get("healthelink_scoring_engine_submission_passed"))));
             interactions.add(new InteractionData("healtheconnections_scoring_engine_submission_passed",
-                    getSafeIntegerValue(data.get("healtheconnections_scoring_engine_submission_passed"))));                    
+                    getSafeIntegerValue(data.get("healtheconnections_scoring_engine_submission_passed"))));
             interactions.add(new InteractionData("healthix_scoring_engine_submission_passed",
                     getSafeIntegerValue(data.get("healthix_scoring_engine_submission_passed"))));
             interactions.add(new InteractionData("grrhio_scoring_engine_submission_passed",
                     getSafeIntegerValue(data.get("grrhio_scoring_engine_submission_passed"))));
             interactions.add(new InteractionData("hixny_scoring_engine_submission_passed",
-                    getSafeIntegerValue(data.get("hixny_scoring_engine_submission_passed"))));        
+                    getSafeIntegerValue(data.get("hixny_scoring_engine_submission_passed"))));
         } else {
             // Default values if no data found
             interactions.add(new InteractionData("total_cross_roads_scn", 0));
@@ -325,6 +334,7 @@ public class PrimeController {
     }
 
     public class InteractionData {
+
         private String label;
         private int count;
 

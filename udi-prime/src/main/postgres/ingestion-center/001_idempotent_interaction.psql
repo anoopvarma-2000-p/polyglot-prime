@@ -802,6 +802,7 @@ DROP VIEW IF EXISTS techbd_udi_ingress.fhir_submission_summary CASCADE;
 CREATE OR REPLACE VIEW techbd_udi_ingress.fhir_submission_summary AS 
    WITH submission_counts AS (
     SELECT  
+        sihr.tenant_id_denorm as tenant_id,
         --NONE    -> ACCEPT_FHIR_BUNDLE
         COUNT(CASE WHEN sihr.nature->>'nature' = 'Original FHIR Payload' THEN 1 END) AS total_submissions,
         --FORWARD-> COMPLETE
@@ -815,12 +816,18 @@ CREATE OR REPLACE VIEW techbd_udi_ingress.fhir_submission_summary AS
     WHERE 
         hintr."key" = '/Bundle'
         AND sihr.created_at >= CURRENT_DATE - INTERVAL '7 days'
+    GROUP BY tenant_id
 )
-SELECT  
+SELECT
+    tenant_id,
     total_submissions,
     accepted_submissions,
     rejected_submissions,
-    total_submissions - accepted_submissions - rejected_submissions AS pending_submissions
+    total_submissions - accepted_submissions - rejected_submissions AS pending_submissions,
+    CASE 
+        WHEN total_submissions > 0 THEN ROUND((rejected_submissions::decimal / total_submissions::decimal) * 100, 2)
+        ELSE 0
+    END AS rejection_rate
 FROM 
     submission_counts;
 
@@ -2852,3 +2859,26 @@ EXCEPTION
 		v_provenance);
 END;         
 $$;
+
+/*******************************************************************************************
+This view extracts user activities from sat_interaction_user.
+******************************************************************************************/
+DROP VIEW IF EXISTS techbd_udi_ingress.interaction_user_activity CASCADE;
+CREATE OR REPLACE VIEW techbd_udi_ingress.interaction_user_activity
+AS SELECT 
+    intr_user.sat_interaction_user_id,
+    intr_user.hub_interaction_id,
+    intr_user.uri,
+    intr_user.nature,
+    intr_user.tenant_id,
+    intr_user.user_id,
+    intr_user.user_name,
+    intr_user.user_session,
+    intr_user.user_role,
+    intr_user.client_ip_address,
+    intr_user.user_agent,
+    intr_user.interaction_start_time,
+    intr_user.interaction_end_time,
+    intr_user.created_at
+FROM techbd_udi_ingress.sat_interaction_user intr_user
+order by intr_user.created_at DESC;
