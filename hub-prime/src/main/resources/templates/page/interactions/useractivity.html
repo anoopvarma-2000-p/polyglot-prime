@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+    layout:decorate="~{layout/prime}">
+
+<head>
+    <link rel="stylesheet" href="https://unpkg.com/ag-grid-community/styles/ag-grid.css">
+    <link rel="stylesheet" href="https://unpkg.com/ag-grid-community/styles/ag-theme-alpine.css">
+
+    <!-- if JSON Viewer is not already in the layout, add the following -->
+    <!-- <script src="https://unpkg.com/@alenaksu/json-viewer@2.0.0/dist/json-viewer.bundle.js"></script> -->
+
+    <script src="https://unpkg.com/ag-grid-enterprise/dist/ag-grid-enterprise.js"></script>
+    <style>
+        .grid-description {
+            font-size: 14px;
+            margin: 8px 0px 10px 15px;
+        }
+    </style>
+    <script type="module">
+        import { AGGridAide, AGGridAideBuilder } from '@presentation/shell/aggrid-aide.js';
+        import ModalAide from '@presentation/shell/modal-aide.js';
+
+        const schemaName = 'techbd_udi_ingress';
+        const viewName = 'interaction_user_activity';
+        const popViewName = 'interaction_user_activity';
+        const colName = 'user_id';
+        let colVal;
+        document.addEventListener('DOMContentLoaded', function () {
+
+            const loggedInUserIdElement = document.getElementById('loggedinUserId');
+            if (loggedInUserIdElement) {
+                const loggedInUserId = loggedInUserIdElement.innerHTML;
+                console.log(loggedInUserId);
+                colVal = loggedInUserId;
+            }
+
+            const modalAide = new ModalAide();
+            const agGridInstance = new AGGridAideBuilder()
+                .withColumnDefs([
+                    {
+                        headerName: "Activity Time",
+                        field: "created_at",
+                        sort: "desc",
+                        filter: "agDateColumnFilter"
+                    },
+                    {
+                        headerName: "Interaction ID",
+                        field: "hub_interaction_id",
+                        filter: "agTextColumnFilter",
+                        // cellRenderer: AGGridAide.modalCellRenderer((params, modalAide) => {
+                        //     modalAide.viewFetchedJsonValue(window.shell.serverSideUrl(`/api/ux/tabular/jooq/${schemaName}/${popViewName}/interaction_id/${params.value}.json`));
+                        // }, modalAide)
+                    },
+                    { headerName: "URI", field: "uri", filter: "agTextColumnFilter" },
+                    { headerName: "Nature", field: "nature", filter: "agTextColumnFilter" },
+                    { headerName: "User Name", field: "user_name", filter: "agTextColumnFilter" },
+                    { headerName: "Session", field: "user_session", filter: "agTextColumnFilter" },
+                    { headerName: "User Role", field: "user_role", filter: "agTextColumnFilter" },
+                    { headerName: "Start Time", field: "interaction_start_time", filter: "agDateColumnFilter" },
+                    { headerName: "End Time", field: "interaction_end_time", filter: "agDateColumnFilter" },
+                    { headerName: "User Agent", field: "user_agent", filter: "agTextColumnFilter" }
+                ])
+                .withServerSideDatasource(
+                    window.shell.serverSideUrl(`/api/ux/tabular/jooq/${schemaName}/${viewName}/${colName}/${colVal}.json`),
+                    (data, valueCols) => {
+                        return valueCols.map(col => ({
+                            headerName: col.displayName,
+                            field: col.field
+                        }));
+                    },
+                )
+                .withModalAide(modalAide)
+                .withGridDivStyles({ height: "750px", width: "100%" })
+                .build();
+
+            agGridInstance.init('serverDataGrid');
+        });
+    </script>
+</head>
+
+<body>
+    <div layout:fragment="content">
+        <div class="grid-description" id="date-range">
+            This widget provides an analysis of the activity for the currently logged-in user - 
+            <span sec:authentication="principal.attributes['name']" id="loggedinUserName"></span>
+            <span style="display: none;" sec:authentication="principal.attributes['login']" id="loggedinUserId"></span>
+        </div>
+        <div id="serverDataGrid" class="ag-theme-alpine"></div>
+    </div>
+</body>
+
+</html>

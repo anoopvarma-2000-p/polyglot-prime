@@ -9,6 +9,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -31,6 +32,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Nonnull;
 import lib.aide.tabular.JooqRowsSupplier;
 import lib.aide.tabular.TabularRowsRequest;
+import lib.aide.tabular.TabularRowsRequest.FilterModel;
 import lib.aide.tabular.TabularRowsResponse;
 
 @Controller
@@ -51,8 +53,8 @@ public class TabularRowsController {
             Headers allow the client to include generated SQL in the response or error response for debugging or auditing purposes.
             If the schema name is omitted, the default schema will be used.
             """)
-    @PostMapping(value = { "/api/ux/tabular/jooq/{masterTableNameOrViewName}.json",
-            "/api/ux/tabular/jooq/{schemaName}/{masterTableNameOrViewName}.json" }, consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(value = {"/api/ux/tabular/jooq/{masterTableNameOrViewName}.json",
+        "/api/ux/tabular/jooq/{schemaName}/{masterTableNameOrViewName}.json"}, consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseBody
     public TabularRowsResponse<?> tabularRows(
             @Parameter(description = "Mandatory path variable to mention schema name.", required = true) @PathVariable(required = false) String schemaName,
@@ -60,6 +62,53 @@ public class TabularRowsController {
             @Parameter(description = "Payload for the API. This <b>must not</b> be <code>null</code>.", required = true) final @RequestBody @Nonnull TabularRowsRequest payload,
             @Parameter(description = "Header to mention whether the generated SQL to be included in the response.", required = false) @RequestHeader(value = "X-Include-Generated-SQL-In-Response", required = false, defaultValue = "false") boolean includeGeneratedSqlInResp,
             @Parameter(description = "Header to mention whether the generated SQL to be included in the error response. This will be taken <code>true</code> by default.", required = false) @RequestHeader(value = "X-Include-Generated-SQL-In-Error-Response", required = false, defaultValue = "true") boolean includeGeneratedSqlInErrorResp) {
+
+        return new JooqRowsSupplier.Builder()
+                .withRequest(payload)
+                .withTable(Tables.class, schemaName, masterTableNameOrViewName)
+                .withDSL(udiPrimeJpaConfig.dsl())
+                .withLogger(LOG)
+                .includeGeneratedSqlInResp(includeGeneratedSqlInResp)
+                .includeGeneratedSqlInErrorResp(includeGeneratedSqlInErrorResp)
+                .build()
+                .response();
+    }
+
+    @PostMapping(value = {
+        "/api/ux/tabular/jooq/{schemaName}/{masterTableNameOrViewName}/{columnName}/{columnValue}.json"}, consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseBody
+    public TabularRowsResponse<?> tabularRowsWithCondition(
+            @Parameter(description = "Mandatory path variable to mention schema name.", required = true)
+            @PathVariable(required = false) String schemaName,
+            @Parameter(description = "Mandatory path variable to mention the table or view name.", required = true)
+            final @PathVariable String masterTableNameOrViewName,
+            @Parameter(description = "Mandatory path variable to mention the column name.", required = true)
+            final @PathVariable String columnName,
+            @Parameter(description = "Mandatory path variable to mention the column value.", required = true)
+            final @PathVariable String columnValue,
+            @Parameter(description = "Payload for the API. This <b>must not</b> be <code>null</code>.", required = true)
+            @RequestBody @Nonnull TabularRowsRequest payload,
+            @Parameter(description = "Header to mention whether the generated SQL to be included in the response.", required = false)
+            @RequestHeader(value = "X-Include-Generated-SQL-In-Response", required = false, defaultValue = "false") boolean includeGeneratedSqlInResp,
+            @Parameter(description = "Header to mention whether the generated SQL to be included in the error response. This will be taken <code>true</code> by default.", required = false)
+            @RequestHeader(value = "X-Include-Generated-SQL-In-Error-Response", required = false, defaultValue = "true") boolean includeGeneratedSqlInErrorResp) {
+
+        // Make sure the payload have the filtering added with the column and value provided.
+        // Get the existing filterModel or initialize a new one
+        Map<String, FilterModel> filterModel = payload.filterModel();
+        if (filterModel == null) {
+            filterModel = new HashMap<>();
+        }
+
+        // Create a new FilterModel for : columnName
+        FilterModel columnNameFilter = new FilterModel(
+                "text", // filterType
+                "equals", // type
+                columnValue, // filter value
+                null, null // dateFrom, dateTo
+        );
+        filterModel.put(columnName, columnNameFilter); // Add or update the user_name filter in filterModel
+        payload.filterModel().putAll(filterModel); // Directly update the filterModel in the payload
 
         return new JooqRowsSupplier.Builder()
                 .withRequest(payload)
@@ -220,8 +269,8 @@ public class TabularRowsController {
             based on the date range.
             """)
     @GetMapping({
-            "/api/ux/tabular/jooq/{schemaName}/{viewName}/{dateField}/{startDateTimeValue}/{endDateTimeValue}.json",
-            "/api/ux/tabular/jooq/{schemaName}/{viewName}/{columnName1}/{columnValue1}/{dateField}/{startDateTimeValue}/{endDateTimeValue}.json"
+        "/api/ux/tabular/jooq/{schemaName}/{viewName}/{dateField}/{startDateTimeValue}/{endDateTimeValue}.json",
+        "/api/ux/tabular/jooq/{schemaName}/{viewName}/{columnName1}/{columnValue1}/{dateField}/{startDateTimeValue}/{endDateTimeValue}.json"
     })
     @ResponseBody
     public Object getSubmissionCountsBetweenDates(
