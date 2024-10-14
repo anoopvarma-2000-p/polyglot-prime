@@ -6,6 +6,26 @@
     <title>Dashboard Fragment</title>
 
     <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        /* Responsive container */
+        .pie-chart-item {
+            width: 100%;
+            max-width: 500px; /* Limit max width */
+            margin: 0 auto; /* Center horizontally */
+        }
+
+        /* Adjust font size for smaller screens */
+        @media (max-width: 600px) {
+            .pie-chart-item svg text {
+                font-size: 10px;
+            }
+        }
+
+        /* Adjust No Data block styles */
+        .no-data-message {
+            font-size: 14px; /* Smaller font size on small screens */
+    }
+    </style>
 </head>
 
 <body th:fragment="serverTextStat(title, hxGet)">
@@ -38,12 +58,13 @@
                 <span class="text-sm font-normal">%</span>
             </dd>
 
-            <div class="mt-12 w-full">
-                <pre class=" bg-white p-4 rounded-lg shadow-md">
-                    <dl th:id="'pie-chart-' + ${tenantId}" class=" pie-chart-item  flex justify-center items-center pt-12" style="width: 500px;">
-                    </dl>
-                </pre>
-            </div>
+        </div>
+        <div class="mt-3 w-full">
+            <pre class="bg-white p-4 rounded-lg shadow-md">
+                <dt class="truncate text-sm font-bold text-gray-500" th:text="${tenantId}">Widget Title</dt>
+                <dl th:id="'pie-chart-' + ${tenantId}" class=" pie-chart-item  flex justify-center items-center">
+                </dl>
+            </pre>
         </div>
 
     </div>
@@ -63,10 +84,6 @@
             if (totalSubmissions > 0 || pendingSubmissions > 0 || acceptedSubmissions > 0 || rejectedSubmissions > 0) {
                 chartContainer.style.display = 'block';
                 const pieChartData = [
-                    // {
-                    //     count: totalSubmissions,
-                    //     label: "Total Submissions"
-                    // },
                     {
                         count: pendingSubmissions,
                         label: "Pending Submissions"
@@ -83,20 +100,28 @@
 
                 createPieChart(pieChartData, tId);
             } else {
-                chartContainer.style.display = 'none';
+                chartContainer.style.display = 'flex';
+                chartContainer.style.justifyContent = 'center';
+                chartContainer.style.alignItems = 'center';
+                chartContainer.style.height = '100%';
+                chartContainer.style.minHeight = '445px';
+
+                chartContainer.innerHTML = `<p class="no-data-message" style="font-weight: bold; color: #666; text-align: center;">No Data</p>`;
             }
         }
 
         call('[[${tenantId}]]');
 
         function createPieChart(interactions, tId) {
-            const width = 75;
-            const height = 75;
+            const container = document.querySelector(`#pie-chart-${tId}`);
+            const containerWidth = container.clientWidth;
+            const width = containerWidth;
+            const height = containerWidth;
             const radius = Math.min(width, height) / 2;
 
             const color = d3.scaleOrdinal()
                 .domain(interactions.map(d => d.label))
-                .range(d3.schemeCategory10);
+                .range(["#FE6D18", "#2CA02C", "#FF0000"]);
 
             const pie = d3.pie()
                 .value(d => d.count);
@@ -107,10 +132,11 @@
 
             const svg = d3.select(`#pie-chart-${tId}`)
                 .append("svg")
-                .attr("class", "align-middle w-[70%] mt-[-45px]")
-                .attr("viewBox", `0 0 ${width + 300} ${height}`)
+                .attr("width", "100%")
+                .attr("height", "100%")
+                .attr("viewBox", `0 0 ${width} ${height + 100}`)
                 .append("g")
-                .attr("transform", `translate(${width / 2},${height / 2})`);
+                .attr("transform", `translate(${width / 2}, ${height / 2})`);
 
             svg.selectAll("path")
                 .data(pie(interactions))
@@ -121,9 +147,9 @@
                 .text(d => `${d.data.label}: ${d.data.count}`);
 
             const legend = svg.append("g")
-                .attr("transform", `translate(${radius + 50}, -${height / 2})`);
+                .attr("transform", `translate(${-(width / 4)}, ${radius + 40})`);
 
-            const legendRectSize = 8;
+            const legendRectSize = 12;
             const legendSpacing = 4;
 
             const legendItems = legend.selectAll('.legend-item')
@@ -142,10 +168,9 @@
             legendItems.append('text')
                 .attr('x', legendRectSize + legendSpacing)
                 .attr('y', legendRectSize - legendSpacing)
-                .style('font-size', '10px')
+                .style('font-size', '12px')
                 .style('font-family', 'sans-serif')
-                .text(d => d.label)
-                .attr('dy', '0.35em');
+                .text(d => d.label);
         }
     </script>
 </body>
