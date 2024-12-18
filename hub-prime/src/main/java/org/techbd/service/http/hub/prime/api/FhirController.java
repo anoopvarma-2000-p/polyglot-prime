@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.hl7.fhir.r4.model.Bundle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.env.Environment;
@@ -39,6 +40,7 @@ import org.techbd.service.http.hub.prime.AppConfig;
 import org.techbd.udi.UdiPrimeJpaConfig;
 import static org.techbd.udi.auto.jooq.ingress.Tables.INTERACTION_HTTP_REQUEST;
 
+import ca.uhn.fhir.context.FhirContext;
 import io.opentelemetry.api.trace.Tracer;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -144,7 +146,7 @@ public class FhirController {
     @ResponseBody
     @Async
     public Object validateBundleAndForward(
-            @Parameter(description = "Payload for the API. This <b>must not</b> be <code>null</code>.", required = true) final @RequestBody @Nonnull String payload,
+            @Parameter(description = "Payload for the API. This <b>must not</b> be <code>null</code>.", required = true) final @RequestBody @Nonnull Bundle payload,
             @Parameter(description = "Parameter to specify the Tenant ID. This is a <b>mandatory</b> parameter.", required = true) @RequestHeader(value = Configuration.Servlet.HeaderName.Request.TENANT_ID, required = true) String tenantId,
             // "profile" is the same name that HL7 validator uses
             @Parameter(description = "Profile URL for the API.", required = false) @RequestParam(value = "profile", required = false) String fhirProfileUrlParam,
@@ -196,8 +198,14 @@ public class FhirController {
 
         final var provenance = "%s.validateBundleAndForward(%s)".formatted(FhirController.class.getName(),
                 isSync ? "sync" : "async");
-        request = new CustomRequestWrapper(request, payload);
-        return fhirService.processBundle(payload, tenantId, fhirProfileUrlParam, fhirProfileUrlHeader,
+        
+        // Create a FHIR context for R4
+        FhirContext fhirContext = FhirContext.forR4();
+        // Convert the Bundle to a JSON string
+        String payloadStr = fhirContext.newJsonParser().setPrettyPrint(true).encodeResourceToString(payload);
+
+        request = new CustomRequestWrapper(request, payloadStr);
+        return fhirService.processBundle(payloadStr, tenantId, fhirProfileUrlParam, fhirProfileUrlHeader,
                 uaValidationStrategyJson,
                 customDataLakeApi, dataLakeApiContentType, healthCheck, isSync, includeRequestInOutcome,
                 includeIncomingPayloadInDB,
