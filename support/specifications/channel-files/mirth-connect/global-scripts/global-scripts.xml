@@ -246,7 +246,8 @@ function getHeaderParameters(headers, channelMap, sourceMap) {
         Packages.org.techbd.config.Constants.GROUP_INTERACTION_ID,
         Packages.org.techbd.config.Constants.MASTER_INTERACTION_ID,
         Packages.org.techbd.config.Constants.SOURCE_TYPE,
-        Packages.org.techbd.config.Constants.VALIDATION_SEVERITY_LEVEL
+        Packages.org.techbd.config.Constants.VALIDATION_SEVERITY_LEVEL,
+        Packages.org.techbd.config.Constants.BASE_FHIR_URL
     ];
 
     // Fetch and store only the required headers
