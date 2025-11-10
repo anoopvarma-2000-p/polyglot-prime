@@ -379,6 +379,10 @@ public class InteractionsFilter extends OncePerRequestFilter {
     /**
      * Verify certificate chain against provided CA certs. Wraps underlying
      * checked exceptions into CertificateException to simplify callers.
+     * 
+     * Note: Self-signed certificates will only pass validation if they are 
+     * explicitly included in the CA bundle from S3. To support arbitrary 
+     * self-signed certificates, modify the trust anchor logic below.
      */
     private void verifyCertificateChain(X509Certificate[] clientChain, X509Certificate[] caCerts)
             throws CertificateException {
@@ -407,6 +411,16 @@ public class InteractionsFilter extends OncePerRequestFilter {
                 trustAnchors.add(new TrustAnchor(ca, null));
             }
 
+            // OPTIONAL: Support self-signed certificates by adding client cert as trust anchor
+            // Uncomment the following block if you want to accept ANY self-signed certificate:
+            /*
+            X509Certificate clientCert = clientChain[0];
+            if (clientCert.getSubjectX500Principal().equals(clientCert.getIssuerX500Principal())) {
+                LOG.info("InteractionsFilter: detected self-signed certificate, adding as trust anchor");
+                trustAnchors.add(new TrustAnchor(clientCert, null));
+            }
+            */
+
             PKIXParameters params = new PKIXParameters(trustAnchors);
             params.setRevocationEnabled(false);
             CertPathValidator.getInstance("PKIX").validate(certPath, params);
@@ -414,8 +428,7 @@ public class InteractionsFilter extends OncePerRequestFilter {
             // Build a more detailed diagnostic message for logs / internal use
             StringBuilder details = new StringBuilder();
             details.append(e.getClass().getSimpleName());
-            if (e instanceof CertPathValidatorException) {
-                CertPathValidatorException cpve = (CertPathValidatorException) e;
+            if (e instanceof CertPathValidatorException cpve) {
                 details.append(": reason=").append(cpve.getReason());
                 try {
                     int idx = cpve.getIndex();
