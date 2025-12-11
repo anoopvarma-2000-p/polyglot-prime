@@ -36,6 +36,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.techbd.service.http.hub.prime.ux.validator.Validator;
 import org.techbd.udi.UdiPrimeJpaConfig;
+// import org.techbd.corelib.config.CoreUdiDualDataSourceConfig;
 import org.techbd.udi.auto.jooq.ingress.Tables;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -58,14 +59,16 @@ public class TabularRowsController {
     private static final Pattern VALID_PATTERN_FOR_SCHEMA_AND_TABLE_AND_COLUMN = Pattern.compile("^[a-zA-Z0-9_]+$");
 
     private final UdiPrimeJpaConfig udiPrimeJpaConfig;
+    // private final CoreUdiDualDataSourceConfig coreUdiDualDataSourceConfig;
     private final List<Validator> validators;
     @Autowired
     private FileDownloadProperties fileDownloadProperties;
     @Autowired
     private ObjectMapper objectMapper;
 
-    public TabularRowsController(final UdiPrimeJpaConfig udiPrimeJpaConfig, List<Validator> validators) {
+    public TabularRowsController(final UdiPrimeJpaConfig udiPrimeJpaConfig, /*CoreUdiDualDataSourceConfig coreUdiDualDataSourceConfig,*/ List<Validator> validators) {
         this.udiPrimeJpaConfig = udiPrimeJpaConfig;
+        // this.coreUdiDualDataSourceConfig = coreUdiDualDataSourceConfig;
         this.validators = validators;
     }
 

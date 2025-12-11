@@ -198,7 +198,7 @@ public final class DocResourcesService {
     public DocResourcesService(final SandboxHelpers sboxHelpers) throws Exception {
         vfsManager = VFS.getManager();
         this.sboxHelpers = sboxHelpers;
-        loadResources();
+        // // loadResources();
     }
 
     protected void loadResources() throws Exception {

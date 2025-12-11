@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.techbd.corelib.config.Configuration;
 import org.techbd.corelib.config.Constants;
 import org.techbd.corelib.config.CoreUdiPrimeJpaConfig;
+import org.techbd.corelib.config.CoreUdiDualDataSourceConfig;
 import org.techbd.corelib.config.Helpers;
 import org.techbd.corelib.service.dataledger.DataLedgerApiClient;
 import org.techbd.corelib.util.CoreFHIRUtil;
@@ -60,16 +61,18 @@ public class FhirController {
         private final AppConfig appConfig;
         private final DataLedgerApiClient dataLedgerApiClient;
         private final CoreUdiPrimeJpaConfig coreUdiPrimeJpaConfig;
+        private final CoreUdiDualDataSourceConfig coreUdiDualDataSourceConfig;
         private final FHIRService fhirService;
         private final Tracer tracer;
 
         public FhirController(final OrchestrationEngine engine,
         final AppConfig appConfig ,final DataLedgerApiClient dataLedgerApiClient,final FHIRService fhirService
-        ,final CoreUdiPrimeJpaConfig coreUdiPrimeJpaConfig) throws IOException {
+        ,final CoreUdiPrimeJpaConfig coreUdiPrimeJpaConfig, CoreUdiDualDataSourceConfig coreUdiDualDataSourceConfig) throws IOException {
                 this.appConfig = appConfig;
                 this.engine = engine;
                 this.fhirService = fhirService;
                 this.dataLedgerApiClient = dataLedgerApiClient;
+                this.coreUdiDualDataSourceConfig = coreUdiDualDataSourceConfig;
                  this.tracer = GlobalOpenTelemetry.get().getTracer("FhirController");
                 this.coreUdiPrimeJpaConfig = coreUdiPrimeJpaConfig;
         }
@@ -180,7 +183,7 @@ public class FhirController {
         public Object bundleStatus(
                         @Parameter(description = "<b>mandatory</b> path variable to specify the bundle session ID.", required = true) @PathVariable String bundleSessionId,
                         final Model model, HttpServletRequest request) {
-                final var jooqDSL = coreUdiPrimeJpaConfig.dsl();
+                final var jooqDSL = coreUdiDualDataSourceConfig.readDsl();
                 try {
                         final var result = jooqDSL.select()
                                         .from(INTERACTION_HTTP_REQUEST)

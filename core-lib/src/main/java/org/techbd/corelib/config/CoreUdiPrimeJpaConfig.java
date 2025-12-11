@@ -21,6 +21,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.env.Environment;
 import org.springframework.jdbc.datasource.TransactionAwareDataSourceProxy;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 @org.springframework.context.annotation.Configuration
@@ -32,14 +33,14 @@ public class CoreUdiPrimeJpaConfig {
     @Autowired
     private Environment environment;
 
-    @Bean
+    @Bean("nexusUdiPrimaryDataSource")
     @Primary
     @Lazy
-    @ConditionalOnProperty(name = "org.techbd.udi.prime.jdbc.url")
-    @ConfigurationProperties(prefix = "org.techbd.udi.prime.jdbc")
+    @ConditionalOnProperty(name = "org.techbd.udi.prime.jdbc.read.url")
+    @ConfigurationProperties(prefix = "org.techbd.udi.prime.jdbc.read")
     public DataSource udiPrimaryDataSource() {
-        String jdbcUrl = environment.getProperty("org.techbd.udi.prime.jdbc.url");
-        String username = environment.getProperty("org.techbd.udi.prime.jdbc.username");
+        String jdbcUrl = environment.getProperty("org.techbd.udi.prime.jdbc.read.url");
+        String username = environment.getProperty("org.techbd.udi.prime.jdbc.read.username");
         String driver = environment.getProperty("org.techbd.udi.prime.jdbc.driver-class-name");
 
         log.info("Initializing UDI Primary DataSource...");
