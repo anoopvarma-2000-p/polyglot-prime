@@ -32,8 +32,21 @@ public class SwaggerConfig {
     @Value("${TECHBD_HUB_PRIME_FHIR_UI_BASE_URL:#{null}}")
     private String hubApiUrl;
 
-    @Value("${TECHBD_HUB_PRIME_FHIR_API_BASE_URL:#{null}}")
-    private String fhirApiUrl;
+    @Value("${TECHBD_HUB_PRIME_FHIR_BUNDLE_API_BASE_URL:#{null}}")
+    private String fhirBundleApiUrl;
+    @Value("${TECHBD_HUB_PRIME_FHIR_VALIDATE_API_BASE_URL:#{null}}")
+    private String fhirValidateApiUrl;
+
+    @Value("${TECHBD_HUB_PRIME_CSV_BUNDLE_API_BASE_URL:#{null}}")
+    private String csvBundleApiUrl;
+    @Value("${TECHBD_HUB_PRIME_CSV_VALIDATE_API_BASE_URL:#{null}}")
+    private String csvValidateApiUrl;
+
+    @Value("${TECHBD_HUB_PRIME_CCDA_API_BASE_URL:#{null}}")
+    private String ccdaApiUrl;
+
+    @Value("${TECHBD_HUB_PRIME_Hl7_API_BASE_URL:#{null}}")
+    private String hl7ApiUrl;
 
     public SwaggerConfig(final AppConfig appConfig) {
         this.appConfig = appConfig;
@@ -126,19 +139,68 @@ public class SwaggerConfig {
     }
 
     @Bean
-    public GroupedOpenApi techByDesignFhirApiGroup() {
+    public GroupedOpenApi techByDesignFhirBundleApiGroup() {
         return GroupedOpenApi.builder()
-                .group("FHIR API")
+                .group("FHIR Bundle Submisssion API")
+                .pathsToMatch("/Bundle", "/Bundle/")
+                .addOpenApiCustomizer(openApi -> {
+                    // Set custom servers
+                    List<Server> servers = new ArrayList<>();
+                    servers.add(new Server()
+                            .url(fhirBundleApiUrl)
+                            .description("Tech by Design FHIR Bundle API Channel"));
+                    openApi.setServers(servers);
+
+                    // Add reusable FileUpload schema
+                    openApi.getComponents().addSchemas("FileUpload", new io.swagger.v3.oas.models.media.Schema<>()
+                            .type("object")
+                            .addProperties("file", new io.swagger.v3.oas.models.media.Schema<>()
+                                    .type("file")
+                                    .format("binary")));
+                })
+                .build();
+    }
+
+    @Bean
+    public GroupedOpenApi techByDesignFhirValidateApiGroup() {
+        return GroupedOpenApi.builder()
+                .group("FHIR APIs")
                 .pathsToMatch("/metadata", "/Bundles/status/nyec-submission-failed",
-                        "/Bundle", "/Bundle/**",
-                        "/flatfile/csv/Bundle", "/flatfile/csv/Bundle/**",
+                        "/Bundle/$validate", "/Bundle/$validate/",
+                        "/Bundle/$status/**",
                         "/api/expect/fhir/**")
                 .addOpenApiCustomizer(openApi -> {
                     // Set custom servers
                     List<Server> servers = new ArrayList<>();
                     servers.add(new Server()
-                            .url(fhirApiUrl)
+                            .url(fhirValidateApiUrl)
                             .description("Tech by Design FHIR API Server"));
+                    openApi.setServers(servers);
+
+                    // Add reusable FileUpload schema
+                    openApi.getComponents().addSchemas("FileUpload", new io.swagger.v3.oas.models.media.Schema<>()
+                            .type("object")
+                            .addProperties("file", new io.swagger.v3.oas.models.media.Schema<>()
+                                    .type("file")
+                                    .format("binary")));
+                })
+                .build();
+    }
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    @Bean
+    public GroupedOpenApi techByDesignCcdaApiGroup() {
+        return GroupedOpenApi.builder()
+                .group("CCDA APIs")
+                .pathsToMatch("/ccda/Bundle", "/ccda/Bundle/",
+                        "/ccda/Bundle/$validate","/ccda/Bundle/$validate/")
+                .addOpenApiCustomizer(openApi -> {
+                    // Set custom servers
+                    List<Server> servers = new ArrayList<>();
+                    servers.add(new Server()
+                            .url(ccdaApiUrl)
+                            .description("Tech by Design CCDA API Channel"));
                     openApi.setServers(servers);
 
                     // Add reusable FileUpload schema
@@ -261,8 +323,32 @@ public class SwaggerConfig {
                                             .addApiResponse("500",
                                                     new ApiResponse()
                                                             .description("Server error")))));
+                })
+                .build();
+    }
 
-                    // Add Mirth Endpoint 3
+    @Bean
+    public GroupedOpenApi techByDesignHl7ApiGroup() {
+        return GroupedOpenApi.builder()
+                .group("Hl7 APIs")
+                .pathsToMatch("/hl7v2/Bundle", "/hl7v2/Bundle/",
+                        "/hl7v2/Bundle/$validate", "/hl7v2/Bundle/$validate/")
+                .addOpenApiCustomizer(openApi -> {
+                    // Set custom servers
+                    List<Server> servers = new ArrayList<>();
+                    servers.add(new Server()
+                            .url(hl7ApiUrl)
+                            .description("Tech by Design Hl7 API Server"));
+                    openApi.setServers(servers);
+
+                    // Add reusable FileUpload schema
+                    openApi.getComponents().addSchemas("FileUpload", new io.swagger.v3.oas.models.media.Schema<>()
+                            .type("object")
+                            .addProperties("file", new io.swagger.v3.oas.models.media.Schema<>()
+                                    .type("file")
+                                    .format("binary")));
+
+                    // Add Bridgelink Endpoint
                     openApi.getPaths().addPathItem("/hl7v2/Bundle", new PathItem()
                             .post(new Operation()
                                     .tags(List.of("Tech by Design Hub HL7 Endpoints"))
@@ -378,4 +464,51 @@ public class SwaggerConfig {
                 })
                 .build();
     }
+
+    @Bean
+    public GroupedOpenApi techByDesignCsvBundleApiGroup() {
+        return GroupedOpenApi.builder()
+                .group("Flatfile CSV Bundle API")
+                .pathsToMatch("/flatfile/csv/Bundle", "/flatfile/csv/Bundle/")
+                .addOpenApiCustomizer(openApi -> {
+                    // Set custom servers
+                    List<Server> servers = new ArrayList<>();
+                    servers.add(new Server()
+                            .url(csvBundleApiUrl)
+                            .description("Tech by Design Flatfile CSV API Server"));
+                    openApi.setServers(servers);
+
+                    // Add reusable FileUpload schema
+                    openApi.getComponents().addSchemas("FileUpload", new io.swagger.v3.oas.models.media.Schema<>()
+                            .type("object")
+                            .addProperties("file", new io.swagger.v3.oas.models.media.Schema<>()
+                                    .type("file")
+                                    .format("binary")));
+                })
+                .build();
+    }
+
+    @Bean
+    public GroupedOpenApi techByDesignCsvValidateApiGroup() {
+        return GroupedOpenApi.builder()
+                .group("Flatfile CSV Validate API")
+                .pathsToMatch("/flatfile/csv/Bundle/$validate", "/flatfile/csv/Bundle/$validate/")
+                .addOpenApiCustomizer(openApi -> {
+                    // Set custom servers
+                    List<Server> servers = new ArrayList<>();
+                    servers.add(new Server()
+                            .url(csvValidateApiUrl)
+                            .description("Tech by Design Flatfile CSV API Server"));
+                    openApi.setServers(servers);
+
+                    // Add reusable FileUpload schema
+                    openApi.getComponents().addSchemas("FileUpload", new io.swagger.v3.oas.models.media.Schema<>()
+                            .type("object")
+                            .addProperties("file", new io.swagger.v3.oas.models.media.Schema<>()
+                                    .type("file")
+                                    .format("binary")));
+                })
+                .build();
+    }
+
 }

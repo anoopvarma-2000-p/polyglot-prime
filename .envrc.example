@@ -48,8 +48,13 @@ export UPI_WS_EDITOR_VSCODE_REMOTE_DISTRO=Debian
 # Variable to store the application log file. '.log' will be automatically added, so it does not need to be specified.
 export ORG_TECHBD_HUB_PRIME_LOG_FILE= #Path to the log file with file name (${HOME}/log/techbd/hub-prime/hub-prime-application)
 
-## Set the API base URL
-export TECHBD_HUB_PRIME_FHIR_API_BASE_URL=http://localhost:8080
+## Set the API base URLs
+export TECHBD_HUB_PRIME_FHIR_BUNDLE_API_BASE_URL=http://localhost:9000
+export TECHBD_HUB_PRIME_FHIR_VALIDATE_API_BASE_URL=http://localhost:9001
+export TECHBD_HUB_PRIME_CSV_BUNDLE_API_BASE_URL=http://localhost:9004
+export TECHBD_HUB_PRIME_CSV_VALIDATE_API_BASE_URL=http://localhost:9005
+export TECHBD_HUB_PRIME_CCDA_API_BASE_URL=http://localhost:9002
+export TECHBD_HUB_PRIME_Hl7_API_BASE_URL=http://localhost:9006
 ## Set the UI base URL
 export TECHBD_HUB_PRIME_FHIR_UI_BASE_URL=http://localhost:8080
 
