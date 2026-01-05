@@ -321,11 +321,11 @@
     		<artifactId>secretsmanager</artifactId>
     		<version>2.17.87</version>
 		</dependency>
-		<dependency>
+		<!-- <dependency>
   			<groupId>io.github.linuxforhealth</groupId>
   			<artifactId>hl7v2-fhir-converter</artifactId>
   			<version>v1.1.0</version>
-		</dependency>
+		</dependency> -->
 		<dependency>
 			<groupId>ca.uhn.hapi</groupId>
 			<artifactId>hapi-structures-v27</artifactId>
