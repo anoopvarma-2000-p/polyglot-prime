@@ -43,7 +43,9 @@ spring:
   main:
     allow-bean-definition-overriding: true
   autoconfigure:
-    exclude: org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - io.github.wimdeblauwe.htmx.spring.boot.mvc.HtmxMvcAutoConfiguration
   application:
     name: techbd-hub-prime
   jpa:
