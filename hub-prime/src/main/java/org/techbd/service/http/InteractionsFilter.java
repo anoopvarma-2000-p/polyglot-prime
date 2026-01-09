@@ -156,7 +156,7 @@ public class InteractionsFilter extends OncePerRequestFilter {
         // payloads
         final var requestURI = origRequest.getRequestURI();
         final var createdAt = OffsetDateTime.now();
-        final var mutatableReq = new ContentCachingRequestWrapper(origRequest);
+        final var mutatableReq = new ContentCachingRequestWrapper(origRequest, 1024 * 1024);
         final var persistInteractionDB = iprDB.requestMatcher().matches(origRequest);
         final var persistReqPayloadDB = iprDB.persistReqPayloadMatcher().matches(origRequest);
         final var persistRespPayloadDB = iprDB.persistRespPayloadMatcher().matches(origRequest);

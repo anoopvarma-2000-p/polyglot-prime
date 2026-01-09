@@ -921,15 +921,9 @@ public class FHIRService {
 							responseBody);
 					errorMap.put("statusCode", webClientResponseException
 							.getStatusCode().value());
-					final var responseHeaders = webClientResponseException
-							.getHeaders()
-							.entrySet()
-							.stream()
-							.collect(Collectors.toMap(
-									Map.Entry::getKey,
-									entry -> String.join(
-											",",
-											entry.getValue())));
+					    final var responseHeaders = new java.util.HashMap<String, String>();
+					    webClientResponseException.getHeaders().forEach((k, v) -> responseHeaders.put(k,
+						    String.join(",", v)));
 					errorMap.put("headers", responseHeaders);
 					errorMap.put("statusText", webClientResponseException
 							.getStatusText());

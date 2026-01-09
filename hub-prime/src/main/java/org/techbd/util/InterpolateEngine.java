@@ -68,8 +68,8 @@ public class InterpolateEngine {
     public InterpolateEngine(final Map<String, Object> vars, final String prefix, final String suffix,
             final String defaultValueSeparator,
             final boolean ignoreUnresolvablePlaceholders, String... requiredPlaceholderNames) {
-        this.placeholderHelper = new PropertyPlaceholderHelper(prefix, suffix, defaultValueSeparator,
-                ignoreUnresolvablePlaceholders);
+        this.placeholderHelper = new PropertyPlaceholderHelper(prefix, suffix, defaultValueSeparator, '{',
+            ignoreUnresolvablePlaceholders);
         this.placeholders = vars != null ? new HashMap<>(vars) : new HashMap<>();
         this.requiredPlaceholderNames = List.of(requiredPlaceholderNames);
         this.spelCtx.setVariables(Collections.unmodifiableMap(this.placeholders));

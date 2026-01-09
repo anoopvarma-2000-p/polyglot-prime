@@ -18,7 +18,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
-import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -44,9 +43,6 @@ class ApplicationTests {
 	private int port;
 
 	@Autowired
-	private TestRestTemplate restTemplate;
-
-	@Autowired
 	private ObjectMapper objectMapper;
 
 	@Autowired
@@ -60,7 +56,8 @@ class ApplicationTests {
 
 	@Test
 	public void metaDataShouldReturnCapabilities() throws Exception {
-		ResponseEntity<String> response = restTemplate.getForEntity(getTestServerUrl("/metadata"), String.class);
+		RestTemplate rt = createRestTemplateWithTimeouts();
+		ResponseEntity<String> response = rt.getForEntity(getTestServerUrl("/metadata"), String.class);
 
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 		assertThat(response.getBody()).isNotNull();
@@ -77,13 +74,15 @@ class ApplicationTests {
 	}
 
 	Map<?, ?> getBundleValidateResult(final @NotNull String fixtureFilename) throws Exception {
+		RestTemplate rt = createRestTemplateWithTimeouts();
+
 		HttpHeaders headers = new HttpHeaders();
 		headers.setContentType(MediaType.APPLICATION_JSON);
 		headers.add(Configuration.Servlet.HeaderName.Request.TENANT_ID, "unit-test");
-		
+
 		HttpEntity<String> requestEntity = new HttpEntity<>(fixtureContent(fixtureFilename), headers);
 
-		ResponseEntity<String> response = restTemplate.postForEntity(getTestServerUrl("/Bundle/$validate"),
+		ResponseEntity<String> response = rt.postForEntity(getTestServerUrl("/Bundle/$validate"),
 				requestEntity, String.class);
 
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -118,12 +117,7 @@ class ApplicationTests {
 	}
 
 	Map<?, ?> getBundleValidateResultWithHapiEngine(final @NotNull String fixtureFilename) throws Exception {
-		
-		RestTemplate restTemplate = new RestTemplate();
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(60000); 
-        factory.setReadTimeout(60000);    
-        restTemplate.setRequestFactory(factory);
+		RestTemplate restTemplate = createRestTemplateWithTimeouts();
 
 		HttpHeaders headers = new HttpHeaders();
 		headers.setContentType(MediaType.APPLICATION_JSON);
@@ -139,6 +133,15 @@ class ApplicationTests {
 		assertThat(response.getBody()).isNotNull();
 
 		return objectMapper.readValue(response.getBody(), Map.class);
+	}
+
+	private RestTemplate createRestTemplateWithTimeouts() {
+		RestTemplate restTemplate = new RestTemplate();
+		SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+		factory.setConnectTimeout(60000);
+		factory.setReadTimeout(60000);
+		restTemplate.setRequestFactory(factory);
+		return restTemplate;
 	}
 
 	@Test
