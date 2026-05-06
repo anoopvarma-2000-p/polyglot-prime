@@ -102,6 +102,22 @@ springdoc:
   show-actuator: true 
 
 server:
+  ssl:
+    # Restrict to TLS 1.2 and 1.3 only — disables deprecated TLS 1.0 and TLS 1.1.
+    # These settings apply when the application terminates TLS directly (i.e., a key-store is configured).
+    # If TLS is terminated at a load balancer (e.g., AWS ALB), enforce protocol restrictions
+    # there instead (e.g., ELBSecurityPolicy-TLS13-1-2-2021-06).
+    enabled-protocols: "TLSv1.2,TLSv1.3"
+    ciphers: >-
+      TLS_AES_128_GCM_SHA256,
+      TLS_AES_256_GCM_SHA384,
+      TLS_CHACHA20_POLY1305_SHA256,
+      TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+      TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+      TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+      TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+      TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+      TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
   servlet:
     context-path: /
     session:
