@@ -31,6 +31,12 @@ public class Constant {
     public static final String SESSION_TIMEOUT_URL = "/?timeout=true";
 
     public static final long HSTS_MAX_AGE = 31536000; // HSTS max age for 1 year
+    public static final String CONTENT_SECURITY_POLICY =
+            "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+            "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; " +
+            "connect-src 'self'; frame-ancestors 'self'; object-src 'none'; base-uri 'self'";
+    public static final String PERMISSIONS_POLICY =
+            "camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=()";
 
     public static final boolean isStatelessApiUrl(String requestUrl) {
         if (requestUrl == null) {

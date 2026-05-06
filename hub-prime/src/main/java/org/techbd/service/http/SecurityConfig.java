@@ -62,7 +62,16 @@ public class SecurityConfig {
                 .securityMatcher(Constant.STATELESS_API_URLS)
                 .authorizeHttpRequests(auth -> auth.anyRequest().permitAll()) // Allow all requests
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)) // Stateless
-                .csrf(AbstractHttpConfigurer::disable); // Disable CSRF for stateless APIs
+                .csrf(AbstractHttpConfigurer::disable) // Disable CSRF for stateless APIs
+                .headers(headers -> {
+                    headers.contentSecurityPolicy(
+                            csp -> csp.policyDirectives(Constant.CONTENT_SECURITY_POLICY));
+                    headers.referrerPolicy(
+                            referrer -> referrer.policy(
+                                    org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN));
+                    headers.permissionsPolicy(
+                            permissions -> permissions.policy(Constant.PERMISSIONS_POLICY));
+                });
 
         return http.build();
     }
@@ -115,6 +124,13 @@ public class SecurityConfig {
                     hsts -> hsts
                             .includeSubDomains(true)
                             .maxAgeInSeconds(Constant.HSTS_MAX_AGE)); // Enable HSTS
+            headers.contentSecurityPolicy(
+                    csp -> csp.policyDirectives(Constant.CONTENT_SECURITY_POLICY));
+            headers.referrerPolicy(
+                    referrer -> referrer.policy(
+                            org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN));
+            headers.permissionsPolicy(
+                    permissions -> permissions.policy(Constant.PERMISSIONS_POLICY));
         });
         return http.build();
     }
