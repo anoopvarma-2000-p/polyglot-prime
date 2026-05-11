@@ -1,6 +1,8 @@
 package org.techbd.service.http;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,12 +27,11 @@ import org.springframework.web.filter.ForwardedHeaderFilter;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
- 
+
 @Configuration
 @Profile("!localopen")
 public class SecurityConfig {
-  
-    
+
     @Autowired(required = false)
     private FusionAuthUserAuthorizationFilter fusionAuthAuthorizationFilter;
 
@@ -42,7 +43,7 @@ public class SecurityConfig {
 
     @Value("${TECHBD_HUB_PRIME_FHIR_UI_BASE_URL:#{null}}")
     private String uiUrl;
-    
+
     @Value("${ORG_TECHBD_SERVICE_HTTP_FUSIONAUTH_BASE_URL}")
     private String fusionAuthBaseUrl;
 
@@ -51,9 +52,12 @@ public class SecurityConfig {
 
     @Value("${SPRING_SECURITY_OAUTH2_LOGOUT_REDIRECT_URI}")
     private String logoutRedirectUrl;
-   
+
     @Value("${AUTH_PROVIDER:github}")
     private String authProvider;
+
+    @Value("${TECHBD_ALLOWED_HOSTS:}")
+    private String allowedHosts;
 
     @Bean
     public SecurityFilterChain statelessSecurityFilterChain(final HttpSecurity http) throws Exception {
@@ -82,32 +86,32 @@ public class SecurityConfig {
                                 .successHandler(oAuth2LoginSuccessHandler())
                                 .defaultSuccessUrl(Constant.HOME_PAGE_URL)
                                 .loginPage(Constant.LOGIN_PAGE_URL))
-               .logout(logout -> logout
-                                .deleteCookies(Constant.SESSIONID_COOKIE)   // clear JSESSIONID (or your custom session cookie)
-                                .invalidateHttpSession(true)                // kill server-side session
-                                .clearAuthentication(true)  
-                                .logoutSuccessHandler(customLogoutSuccessHandler())
-                                .permitAll())
+                .logout(logout -> logout
+                .deleteCookies(Constant.SESSIONID_COOKIE) // clear JSESSIONID (or your custom session cookie)
+                .invalidateHttpSession(true) // kill server-side session
+                .clearAuthentication(true)
+                .logoutSuccessHandler(customLogoutSuccessHandler())
+                .permitAll())
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(sessionManagement -> {
-            // Dynamically adjust session timeout behavior based on the authentication provider
-                        if ("github".equalsIgnoreCase(authProvider)) {
-                            sessionManagement
-                                    .invalidSessionUrl(Constant.SESSION_TIMEOUT_URL)
-                                    .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED);
-                        } else if ("fusionauth".equalsIgnoreCase(authProvider)) {
-                            sessionManagement
-                                    .invalidSessionUrl(fusionAuthLogoutUUrl())  // Use custom logout handler for FusionAuth
-                                    .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED);
-                        }
-                    });
-                  if (fusionAuthAuthorizationFilter != null) {
-                        http.addFilterAfter(fusionAuthAuthorizationFilter, UsernamePasswordAuthenticationFilter.class);
+                    // Dynamically adjust session timeout behavior based on the authentication provider
+                    if ("github".equalsIgnoreCase(authProvider)) {
+                        sessionManagement
+                                .invalidSessionUrl(Constant.SESSION_TIMEOUT_URL)
+                                .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED);
+                    } else if ("fusionauth".equalsIgnoreCase(authProvider)) {
+                        sessionManagement
+                                .invalidSessionUrl(fusionAuthLogoutUUrl()) // Use custom logout handler for FusionAuth
+                                .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED);
                     }
+                });
+        if (fusionAuthAuthorizationFilter != null) {
+            http.addFilterAfter(fusionAuthAuthorizationFilter, UsernamePasswordAuthenticationFilter.class);
+        }
 
-                    if (gitHubUserAuthorizationFilter != null) {
-                        http.addFilterAfter(gitHubUserAuthorizationFilter, UsernamePasswordAuthenticationFilter.class);
-                    }    
+        if (gitHubUserAuthorizationFilter != null) {
+            http.addFilterAfter(gitHubUserAuthorizationFilter, UsernamePasswordAuthenticationFilter.class);
+        }
         // allow us to show our own content in IFRAMEs (e.g. Swagger, etc.)
         http.headers(headers -> {
             headers.frameOptions(frameOptions -> frameOptions.sameOrigin());
@@ -121,14 +125,34 @@ public class SecurityConfig {
 
     @Bean
     public CorsFilter corsFilter() {
-        // primarily setup for Swagger UI and OpenAPI integration
+        // Strict origin whitelist — never reflect arbitrary user-supplied origins.
+        // Origins are derived from the configured API/UI base URLs and TECHBD_ALLOWED_HOSTS.
+        List<String> allowedOrigins = new ArrayList<>();
+        if (apiUrl != null && !apiUrl.isBlank()) {
+            allowedOrigins.add(apiUrl.stripTrailing().replaceAll("/+$", ""));
+        }
+        if (uiUrl != null && !uiUrl.isBlank()) {
+            allowedOrigins.add(uiUrl.stripTrailing().replaceAll("/+$", ""));
+        }
+        if (allowedHosts != null && !allowedHosts.isBlank()) {
+            for (String host : allowedHosts.split(",")) {
+                String trimmed = host.strip();
+                if (!trimmed.isEmpty()) {
+                    // Accept both bare hostnames and full origin URLs
+                    String origin = trimmed.startsWith("http") ? trimmed : "https://" + trimmed;
+                    allowedOrigins.add(origin.replaceAll("/+$", ""));
+                }
+            }
+        }
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         CorsConfiguration config = new CorsConfiguration();
-        config.addAllowedOriginPattern("*"); // Customize as needed
-        config.addAllowedMethod("*");
-        config.addAllowedHeader("*");
-        // Expose Location header for session time out redirection at the UI side (AGGrid etc)
-        config.addExposedHeader("Location");
+        config.setAllowedOrigins(allowedOrigins.isEmpty() ? null : allowedOrigins);
+        config.setAllowedMethods(Constant.CORS_ALLOWED_METHODS);
+        config.setAllowedHeaders(Constant.CORS_ALLOWED_HEADERS);
+        // Expose headers for session time-out redirection at the UI side (AGGrid etc)
+        config.setExposedHeaders(Constant.CORS_EXPOSED_HEADERS);
+        config.setAllowCredentials(true);
         source.registerCorsConfiguration("/**", config);
         return new CorsFilter(source);
     }
@@ -142,9 +166,9 @@ public class SecurityConfig {
     public AuthenticationSuccessHandler oAuth2LoginSuccessHandler() {
         return new OAuth2LoginSuccessHandler();
     }
- 
+
     private static class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
- 
+
         private final RequestCache requestCache = new HttpSessionRequestCache();
 
         @Override
@@ -163,21 +187,21 @@ public class SecurityConfig {
         }
     }
 
-        @Bean
-        public LogoutSuccessHandler customLogoutSuccessHandler() {
-            return (request, response, authentication) -> {
-                if (authentication != null) {
-                    new SecurityContextLogoutHandler().logout(request, response, authentication);
-                }
-                response.sendRedirect(fusionAuthLogoutUUrl());
-            };
-        }
+    @Bean
+    public LogoutSuccessHandler customLogoutSuccessHandler() {
+        return (request, response, authentication) -> {
+            if (authentication != null) {
+                new SecurityContextLogoutHandler().logout(request, response, authentication);
+            }
+            response.sendRedirect(fusionAuthLogoutUUrl());
+        };
+    }
 
-        private String fusionAuthLogoutUUrl() {
-            return fusionAuthBaseUrl + "/oauth2/logout"
-                    + "?client_id=" + clientId
-                    + "&post_logout_redirect_uri=" + logoutRedirectUrl;
-        }
+    private String fusionAuthLogoutUUrl() {
+        return fusionAuthBaseUrl + "/oauth2/logout"
+                + "?client_id=" + clientId
+                + "&post_logout_redirect_uri=" + logoutRedirectUrl;
+    }
 
     /**
      * Register RolePermissionInterceptor for all MVC requests.
