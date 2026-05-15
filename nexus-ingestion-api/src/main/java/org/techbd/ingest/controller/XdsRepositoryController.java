@@ -2,6 +2,7 @@ package org.techbd.ingest.controller;
 
 import java.util.Map;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -54,8 +55,26 @@ public class XdsRepositoryController extends AbstractMessageSourceProvider {
         byte[] rawBytes = request.getInputStream().readAllBytes();
 
         if (rawBytes == null || rawBytes.length == 0) {
+            
+
             LOG.warn("Empty XDS SOAP request. interactionId={}", interactionId);
-            return forwarder.forward(request, new byte[0], interactionId);
+
+            String soapFault = """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+                    <soap:Body>
+                        <soap:Fault>
+                            <faultcode>soap:Client</faultcode>
+                            <faultstring>Empty SOAP request body</faultstring>
+                        </soap:Fault>
+                    </soap:Body>
+                </soap:Envelope>
+                """;
+
+            return ResponseEntity
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .header("Content-Type", "text/xml; charset=utf-8")
+                    .body(soapFault);
         }
         LOG.info("Forwarding XDS SOAP request to /ws. interactionId={}",interactionId);
         return forwarder.forward(request, rawBytes, interactionId);

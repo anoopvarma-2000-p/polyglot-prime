@@ -1,10 +1,10 @@
 <channel version="26.3.0">
-  <id>b84ee0f0-dfed-40bd-8a9e-af052b60860e</id>
+  <id>1908260b-7361-46dc-a9c9-e7114b06e698</id>
   <nextMetaDataId>4</nextMetaDataId>
   <name>FhirBundlleSubmission</name>
-  <description>Version: 0.8.28
-Resolved Health Check handling issues to ensure proper data display in the UI and correct data persistence in the database</description>
-  <revision>2</revision>
+  <description>Version: 0.8.29
+Resolved race condition issue by replacing globalMap usage for FHIR Bundle Submission URL with channelMap-based request isolation.</description>
+  <revision>8</revision>
   <sourceConnector version="26.3.0">
     <metaDataId>0</metaDataId>
     <name>sourceConnector</name>
@@ -118,8 +118,6 @@ Resolved Health Check handling issues to ensure proper data display in the UI an
           <sequenceNumber>0</sequenceNumber>
           <enabled>true</enabled>
           <script>logger.info(&quot;HTTP request validation started.&quot;);
-///////////////////////////////////////////////////////////////////////////////////////////
-
 
 /********************************************
     1️⃣ FETCH JDBC SECRET (JSON secret)
@@ -163,7 +161,7 @@ try {
 } catch (e) {
     logger.error(&quot; Error processing DataLedger API Key secret: &quot; + e.message);
 }
-/////////////////////////////////////////////////////////////////////////
+
 /********************************************
     3️⃣ FETCH FHIR BUNDLE SUBMISSION API URL (Plain text)
 ********************************************/
@@ -203,10 +201,6 @@ try {
     setErrorResponse(500, &quot;Failed to load JDBC URL&quot;);
     throw e;
 }
-
-
-
-
 
 /********************************************
     5️⃣ FETCH DEFAULT DATALAKE API URL (Plain text)
@@ -278,7 +272,6 @@ try {
     }
 	fhirApiUrl = fhirApiUrl + &quot;/Bundle/$validate&quot;;
     channelMap.put(&quot;FHIR_API_URL&quot;, fhirApiUrl);
-    globalMap.put(&quot;fhirBundleSubmissionApiUrl&quot;, fhirApiUrl);
     logger.info(&quot;BL FHIR Bundle Validation API URL loaded successfully from Lookup Manager: &quot; + fhirApiUrl);
 
 } catch (e) {
@@ -286,7 +279,6 @@ try {
     setErrorResponse(500, &quot;Failed to load FHIR API URL&quot;);
     throw e;
 }
-
 
 /********************************************
     8️⃣ FETCH DATA LEDGER API URL (Plain text)
@@ -304,7 +296,6 @@ try {
     logger.error(&quot; Error processing DataLedger API URL  secret: &quot; + e.message);
 }
 
-
 /********************************************
     9️⃣ FETCH DATA LEDGER  DATA_LEDGER_TRACKING (Plain text)
 ********************************************/
@@ -321,7 +312,6 @@ try {
     logger.error(&quot; Error processing DataLedger Tracking secret: &quot; + e.message);
 }
 
-
 /********************************************
     9️⃣ FETCH DATA LEDGER  DATA_LEDGER_DIAGNOSTICS (Plain text)
 ********************************************/
@@ -337,7 +327,6 @@ try {
 } catch (e) {
     logger.error(&quot; Error processing DataLedger diagnostics secret: &quot; + e.message);
 }
-
 
 /********************************************
     10️⃣ FETCH HUB UI URL (Plain text)
@@ -358,7 +347,6 @@ try {
     setErrorResponse(500, &quot;Failed to load HUB UI URL&quot;);
     throw e;
 }
-
 
 /*******************************
     Processing Agent Loader
@@ -2480,7 +2468,7 @@ return;</undeployScript>
     <metadata>
       <enabled>true</enabled>
       <lastModified>
-        <time>1777351960280</time>
+        <time>1778847182047</time>
         <timezone>Asia/Calcutta</timezone>
       </lastModified>
       <pruningSettings>
@@ -2491,13 +2479,13 @@ return;</undeployScript>
     </metadata>
     <channelTags>
       <channelTag>
-        <id>e924e527-e1d7-4929-b158-b56205438e4a</id>
-        <name>0_8_28</name>
+        <id>1fed99a4-dc0e-4fc1-abb4-9ca4ddbd18b4</id>
+        <name>0_8_29</name>
         <channelIds>
-          <string>b84ee0f0-dfed-40bd-8a9e-af052b60860e</string>
+          <string>1908260b-7361-46dc-a9c9-e7114b06e698</string>
         </channelIds>
         <backgroundColor>
-          <red>255</red>
+          <red>128</red>
           <green>0</green>
           <blue>0</blue>
           <alpha>255</alpha>
