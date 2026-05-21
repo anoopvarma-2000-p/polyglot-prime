@@ -8,6 +8,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.jooq.Condition;
@@ -33,8 +34,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class JooqRowsSupplierForSP {
 
-    private final DSLContext dslContext;
+    private static final Pattern VALID_COLUMN_NAME_PATTERN = Pattern.compile("^[a-zA-Z0-9_]+$");
 
+    private final DSLContext dslContext;
+    private final String schemaName;
     private final String storedProcName;
     private final String paramsJson;
     private final TabularRowsRequestForSP payload;
@@ -45,6 +48,7 @@ public class JooqRowsSupplierForSP {
 
     private JooqRowsSupplierForSP(Builder builder) {
         this.dslContext = builder.dslContext;
+        this.schemaName = builder.schemaName;
         this.storedProcName = builder.storedProcName;
         this.paramsJson = builder.paramsJson;
         this.payload = builder.payload;
@@ -54,7 +58,21 @@ public class JooqRowsSupplierForSP {
         return new Builder(dslContext);
     }
 
+    private static void validateColumnName(final String name, final String context) {
+        if (name == null || !VALID_COLUMN_NAME_PATTERN.matcher(name).matches()) {
+            throw new IllegalArgumentException("Invalid column name in " + context + ": " + name);
+        }
+    }
+
     public List<Map<String, Object>> fetchData() throws Exception {
+        // Validate all user-supplied column identifiers upfront to prevent SQL injection
+        if (payload.filterModel() != null) {
+            payload.filterModel().keySet().forEach(f -> validateColumnName(f, "filterModel"));
+        }
+        if (payload.sortModel() != null) {
+            payload.sortModel().forEach(sort -> validateColumnName(sort.colId(), "sortModel"));
+        }
+
         // Construct base query
         SelectJoinStep<Record> baseQuery = dslContext.select().from(getDynamicTablelike(storedProcName, paramsJson));
 
@@ -71,11 +89,8 @@ public class JooqRowsSupplierForSP {
         // Use different formatting based on stored procedure
         if ("get_fhir_patient_screening_questions_answers".equals(storedProcName)
                 || "get_csv_data_integrity_errors".equals(storedProcName)) {
-            // For screening questions, return data without complex formatting to avoid null
-            // issues
             return result.intoMaps();
         } else {
-            // For other stored procedures, use the standard formatting
             return formatData(result.intoMaps());
         }
     }
@@ -127,27 +142,28 @@ public class JooqRowsSupplierForSP {
     }
 
     private Condition buildSingleCondition(String column, TabularRowsRequestForSP.FilterCondition condition) {
+        final var colField = DSL.field(DSL.name(column));
         switch (condition.filterType()) {
             case "number" -> {
                 return switch (condition.type()) { // Total 9 conditions for agNumberColumnFilter
                     case "equals" ->
-                        DSL.field(column).eq(condition.filter());
+                        colField.eq(condition.filter());
                     case "notEqual" ->
-                        DSL.field(column).ne(condition.filter());
+                        colField.ne(condition.filter());
                     case "lessThan" ->
-                        DSL.field(column).lt(condition.filter());
+                        colField.lt(condition.filter());
                     case "lessThanOrEqual" ->
-                        DSL.field(column).le(condition.filter());
+                        colField.le(condition.filter());
                     case "greaterThan" ->
-                        DSL.field(column).gt(condition.filter());
+                        colField.gt(condition.filter());
                     case "greaterThanOrEqual" ->
-                        DSL.field(column).ge(condition.filter());
+                        colField.ge(condition.filter());
                     case "inRange" ->
-                        DSL.field(column).between(condition.filter(), condition.filterTo());
+                        colField.between(condition.filter(), condition.filterTo());
                     case "blank" ->
-                        DSL.field(column).isNull();
+                        colField.isNull();
                     case "notBlank" ->
-                        DSL.field(column).isNotNull();
+                        colField.isNotNull();
                     default ->
                         throw new IllegalArgumentException(
                                 "Unsupported condition type in payload: " + condition.type());
@@ -156,21 +172,21 @@ public class JooqRowsSupplierForSP {
             case "text" -> { // Total 8 conditions for agTextColumnFilter
                 return switch (condition.type()) {
                     case "contains" ->
-                        DSL.field(column).contains((String) condition.filter());
+                        colField.contains((String) condition.filter());
                     case "notContains" ->
-                        DSL.field(column).notContains((String) condition.filter());
+                        colField.notContains((String) condition.filter());
                     case "equals" ->
-                        DSL.field(column).equalIgnoreCase((String) condition.filter());
+                        colField.equalIgnoreCase((String) condition.filter());
                     case "notEqual" ->
-                        DSL.lower(DSL.field(column, String.class)).ne(DSL.lower(DSL.val((String) condition.filter())));
+                        DSL.lower(colField.cast(String.class)).ne(DSL.lower(DSL.val((String) condition.filter())));
                     case "startsWith" ->
-                        DSL.field(column).startsWithIgnoreCase((String) condition.filter());
+                        colField.startsWithIgnoreCase((String) condition.filter());
                     case "endsWith" ->
-                        DSL.field(column).endsWithIgnoreCase((String) condition.filter());
+                        colField.endsWithIgnoreCase((String) condition.filter());
                     case "blank" ->
-                        DSL.field(column).isNull();
+                        colField.isNull();
                     case "notBlank" ->
-                        DSL.field(column).isNotNull();
+                        colField.isNotNull();
                     default ->
                         throw new IllegalArgumentException(
                                 "Unsupported condition type in payload: " + condition.type());
@@ -179,21 +195,21 @@ public class JooqRowsSupplierForSP {
             case "date" -> {
                 return switch (condition.type()) {
                     case "equals" ->
-                        DSL.field(column).eq(convertStringToLocalDate(condition.dateFrom(), DATE_TIME_FORMAT_YMDHMS));
+                        colField.eq(convertStringToLocalDate(condition.dateFrom(), DATE_TIME_FORMAT_YMDHMS));
                     case "notEqual" ->
-                        DSL.field(column).ne(convertStringToLocalDate(condition.dateFrom(), DATE_TIME_FORMAT_YMDHMS));
+                        colField.ne(convertStringToLocalDate(condition.dateFrom(), DATE_TIME_FORMAT_YMDHMS));
                     case "lessThan" ->
-                        DSL.field(column).lt(convertStringToLocalDate(condition.dateFrom(), DATE_TIME_FORMAT_YMDHMS));
+                        colField.lt(convertStringToLocalDate(condition.dateFrom(), DATE_TIME_FORMAT_YMDHMS));
                     case "greaterThan" ->
-                        DSL.field(column).gt(convertStringToLocalDate(condition.dateFrom(), DATE_TIME_FORMAT_YMDHMS));
+                        colField.gt(convertStringToLocalDate(condition.dateFrom(), DATE_TIME_FORMAT_YMDHMS));
                     case "inRange" ->
-                        DSL.field(column).between(
+                        colField.between(
                                 convertStringToLocalDate(condition.dateFrom(), DATE_TIME_FORMAT_YMDHMS),
                                 convertStringToLocalDate(condition.dateTo(), DATE_TIME_FORMAT_YMDHMS));
                     case "blank" ->
-                        DSL.field(column).isNull();
+                        colField.isNull();
                     case "notBlank" ->
-                        DSL.field(column).isNotNull();
+                        colField.isNotNull();
                     default ->
                         throw new IllegalArgumentException(
                                 "Unsupported condition type in payload: " + condition.type());
@@ -217,27 +233,28 @@ public class JooqRowsSupplierForSP {
     }
 
     private Condition buildSingleCondition(String column, TabularRowsRequestForSP.FilterModel filterModel) {
+        final var colField = DSL.field(DSL.name(column));
         switch (filterModel.filterType()) {
             case "number" -> { // Total 9 conditions for agNumberColumnFilter
                 return switch (filterModel.type()) {
                     case "equals" ->
-                        DSL.field(column).eq(filterModel.filter());
+                        colField.eq(filterModel.filter());
                     case "notEqual" ->
-                        DSL.field(column).ne(filterModel.filter());
+                        colField.ne(filterModel.filter());
                     case "lessThan" ->
-                        DSL.field(column).lt(filterModel.filter());
+                        colField.lt(filterModel.filter());
                     case "lessThanOrEqual" ->
-                        DSL.field(column).le(filterModel.filter());
+                        colField.le(filterModel.filter());
                     case "greaterThan" ->
-                        DSL.field(column).gt(filterModel.filter());
+                        colField.gt(filterModel.filter());
                     case "greaterThanOrEqual" ->
-                        DSL.field(column).ge(filterModel.filter());
+                        colField.ge(filterModel.filter());
                     case "inRange" ->
-                        DSL.field(column).between(filterModel.filter(), filterModel.filterTo());
+                        colField.between(filterModel.filter(), filterModel.filterTo());
                     case "blank" ->
-                        DSL.field(column).isNull();
+                        colField.isNull();
                     case "notBlank" ->
-                        DSL.field(column).isNotNull();
+                        colField.isNotNull();
                     default ->
                         throw new IllegalArgumentException(
                                 "Unsupported condition type in payload: " + filterModel.type());
@@ -246,22 +263,22 @@ public class JooqRowsSupplierForSP {
             case "text" -> { // Total 8 conditions for agTextColumnFilter
                 return switch (filterModel.type()) {
                     case "contains" ->
-                        DSL.field(column).contains((String) filterModel.filter());
+                        colField.contains((String) filterModel.filter());
                     case "notContains" ->
-                        DSL.field(column).notContains((String) filterModel.filter());
+                        colField.notContains((String) filterModel.filter());
                     case "equals" ->
-                        DSL.field(column).equalIgnoreCase((String) filterModel.filter());
+                        colField.equalIgnoreCase((String) filterModel.filter());
                     case "notEqual" ->
-                        DSL.lower(DSL.field(column, String.class))
+                        DSL.lower(colField.cast(String.class))
                                 .ne(DSL.lower(DSL.val((String) filterModel.filter())));
                     case "startsWith" ->
-                        DSL.field(column).startsWithIgnoreCase((String) filterModel.filter());
+                        colField.startsWithIgnoreCase((String) filterModel.filter());
                     case "endsWith" ->
-                        DSL.field(column).endsWithIgnoreCase((String) filterModel.filter());
+                        colField.endsWithIgnoreCase((String) filterModel.filter());
                     case "blank" ->
-                        DSL.field(column).isNull();
+                        colField.isNull();
                     case "notBlank" ->
-                        DSL.field(column).isNotNull();
+                        colField.isNotNull();
                     default ->
                         throw new IllegalArgumentException(
                                 "Unsupported condition type in payload: " + filterModel.type());
@@ -270,21 +287,21 @@ public class JooqRowsSupplierForSP {
             case "date" -> {
                 return switch (filterModel.type()) {
                     case "equals" ->
-                        DSL.field(column).eq(convertStringToLocalDate(filterModel.dateFrom(), DATE_TIME_FORMAT_YMDHMS));
+                        colField.eq(convertStringToLocalDate(filterModel.dateFrom(), DATE_TIME_FORMAT_YMDHMS));
                     case "notEqual" ->
-                        DSL.field(column).ne(convertStringToLocalDate(filterModel.dateFrom(), DATE_TIME_FORMAT_YMDHMS));
+                        colField.ne(convertStringToLocalDate(filterModel.dateFrom(), DATE_TIME_FORMAT_YMDHMS));
                     case "lessThan" ->
-                        DSL.field(column).lt(convertStringToLocalDate(filterModel.dateFrom(), DATE_TIME_FORMAT_YMDHMS));
+                        colField.lt(convertStringToLocalDate(filterModel.dateFrom(), DATE_TIME_FORMAT_YMDHMS));
                     case "greaterThan" ->
-                        DSL.field(column).gt(convertStringToLocalDate(filterModel.dateFrom(), DATE_TIME_FORMAT_YMDHMS));
+                        colField.gt(convertStringToLocalDate(filterModel.dateFrom(), DATE_TIME_FORMAT_YMDHMS));
                     case "inRange" ->
-                        DSL.field(column).between(
+                        colField.between(
                                 convertStringToLocalDate(filterModel.dateFrom(), DATE_TIME_FORMAT_YMDHMS),
                                 convertStringToLocalDate(filterModel.dateTo(), DATE_TIME_FORMAT_YMDHMS));
                     case "blank" ->
-                        DSL.field(column).isNull();
+                        colField.isNull();
                     case "notBlank" ->
-                        DSL.field(column).isNotNull();
+                        colField.isNotNull();
                     default ->
                         throw new IllegalArgumentException(
                                 "Unsupported condition type in payload: " + filterModel.type());
@@ -311,6 +328,7 @@ public class JooqRowsSupplierForSP {
         List<OrderField<?>> orderFields = new ArrayList<>();
         if (payload.sortModel() != null && !payload.sortModel().isEmpty()) {
             for (TabularRowsRequestForSP.SortModel sortModel : payload.sortModel()) {
+                validateColumnName(sortModel.colId(), "sortModel");
                 Field<?> field = DSL.field(DSL.name(sortModel.colId()));
                 if ("asc".equalsIgnoreCase(sortModel.sort())) {
                     orderFields.add(field.asc());
@@ -338,13 +356,7 @@ public class JooqRowsSupplierForSP {
 
         return data.stream()
                 .map(row -> row.entrySet().stream()
-                        // Skip null keys to avoid NullPointerException
-                        .filter(e -> {
-                            if (e.getKey() == null) {
-                                return false;
-                            }
-                            return true;
-                        })
+                        .filter(e -> e.getKey() != null)
                         .collect(Collectors.toMap(
                                 Map.Entry::getKey,
                                 entry -> {
@@ -364,13 +376,12 @@ public class JooqRowsSupplierForSP {
                                                 return value;
                                             }
                                         }
-                                        // If value is null, return empty string (or any default non-null value)
                                         return "";
                                     } catch (Exception ex) {
                                         return "";
                                     }
                                 },
-                                (v1, v2) -> v1 // If duplicate key, keep the first value
+                                (v1, v2) -> v1
                         )))
                 .collect(Collectors.toList());
     }
@@ -399,45 +410,24 @@ public class JooqRowsSupplierForSP {
                 Map<String, LocalDate> paramMap = parseDates(paramsJson, objectMapper, formatter);
                 return new GetFhirNeedsAttention().call(paramMap.get("start_date"), paramMap.get("end_date"));
             }
-            // case "get_interaction_http_request" -> {
-            //     return new GetInteractionHttpRequest().call();
-            // }
             case "get_interaction_observe" -> {
-                // Temporary solution: use raw SQL to call the function until JOOQ classes are
-                // regenerated
                 Map<String, LocalDate> paramMap = parseDates(paramsJson, objectMapper, formatter);
                 LocalDate startDate = paramMap.get("start_date");
                 LocalDate endDate = paramMap.get("end_date");
-
-                // Create a table from the function call using raw SQL
-                String functionCall = String.format("techbd_udi_ingress.get_interaction_observe('%s', '%s')",
-                        startDate.toString(), endDate.toString());
-                return DSL.table(functionCall);
+                return DSL.table(DSL.sql(schemaName + "." + storedProcName + "(?, ?)", startDate, endDate));
             }
             case "get_api_interaction_observe" -> {
-                // Temporary solution: use raw SQL to call the function until JOOQ classes are
-                // regenerated
                 Map<String, LocalDate> paramMap = parseDates(paramsJson, objectMapper, formatter);
                 LocalDate startDate = paramMap.get("start_date");
                 LocalDate endDate = paramMap.get("end_date");
-
-                // Create a table from the function call using raw SQL
-                String functionCall = String.format("techbd_udi_ingress.get_api_interaction_observe('%s', '%s')",
-                        startDate.toString(), endDate.toString());
-                return DSL.table(functionCall);
+                return DSL.table(DSL.sql(schemaName + "." + storedProcName + "(?, ?)", startDate, endDate));
             }
             case "get_user_interaction_observe" -> {
-                // Temporary solution: use raw SQL to call the function until JOOQ classes are
-                // regenerated
                 Map<String, LocalDate> paramMap = parseDates(paramsJson, objectMapper, formatter);
                 LocalDate startDate = paramMap.get("start_date");
                 LocalDate endDate = paramMap.get("end_date");
-
-                // Create a table from the function call using raw SQL
-                String functionCall = String.format("techbd_udi_ingress.get_user_interaction_observe('%s', '%s')",
-                        startDate.toString(), endDate.toString());
-                return DSL.table(functionCall);
-            }                        
+                return DSL.table(DSL.sql(schemaName + "." + storedProcName + "(?, ?)", startDate, endDate));
+            }
             case "get_fhir_patient_screening_questions_answers" -> {
                 objectMapper = new ObjectMapper();
                 Map<String, String> paramMap = objectMapper.readValue(paramsJson, Map.class);
@@ -450,128 +440,74 @@ public class JooqRowsSupplierForSP {
             case "get_csv_data_integrity_errors" -> {
                 objectMapper = new ObjectMapper();
                 Map<String, String> paramMap = objectMapper.readValue(paramsJson, Map.class);
-
                 String zipFileHubInteractionId = paramMap.get("p_zip_file_hub_interaction_id");
-
-                // Create a table from the function call using raw SQL
-                String functionCall = String.format("techbd_udi_ingress.get_csv_data_integrity_errors('%s')",
-                        zipFileHubInteractionId);
-                return DSL.table(functionCall);
+                return DSL.table(DSL.sql(schemaName + "." + storedProcName + "(?)", zipFileHubInteractionId));
             }
-  
             case "get_fhir_session_diagnostics" -> {
                 objectMapper = new ObjectMapper();
                 Map<String, String> paramMap = objectMapper.readValue(paramsJson, Map.class);
-
                 String startDate = paramMap.get("p_start_date");
                 String endDate = paramMap.get("p_end_date");
-
-                // Create a table from the function call using raw SQL
-                String functionCall = String.format(
-                        "techbd_udi_ingress.get_fhir_session_diagnostics(DATE '%s', DATE '%s')",
-                        startDate, endDate);
-                return DSL.table(functionCall);
-            }            
- 
+                return DSL.table(DSL.sql(schemaName + "." + storedProcName + "(?, ?)", startDate, endDate));
+            }
             case "get_fhir_session_diagnostics_details" -> {
                 objectMapper = new ObjectMapper();
                 Map<String, String> paramMap = objectMapper.readValue(paramsJson, Map.class);
-
-                String hubInteractionId = paramMap.get("p_hub_interaction_id"); 
                 String startDate = paramMap.get("p_start_date");
-                String endDate = paramMap.get("p_end_date");                
-
-                // Create a table from the function call using raw SQL with proper null handling
-                String functionCall = String.format(
-                        "techbd_udi_ingress.get_fhir_session_diagnostics_details(DATE '%s', DATE '%s', %s)",
-                        startDate, endDate, hubInteractionId != null ? "'" + hubInteractionId + "'" : "NULL");
-                return DSL.table(functionCall);
-            }  
+                String endDate = paramMap.get("p_end_date");
+                String hubInteractionId = paramMap.get("p_hub_interaction_id");
+                return DSL.table(DSL.sql(schemaName + "." + storedProcName + "(?, ?, ?)",
+                        startDate, endDate, hubInteractionId));
+            }
             case "get_fhir_validation_issue_details" -> {
-                // Parse parameters from JSON
                 objectMapper = new ObjectMapper();
                 Map<String, String> paramMap = objectMapper.readValue(paramsJson, Map.class);
-
                 String igVersion = paramMap.get("p_ig_version");
                 String validationEngine = paramMap.get("p_validation_engine");
                 String issueDate = paramMap.get("p_issue_date");
                 String source = paramMap.get("p_source");
-
-                // Build the function call with proper null handling and quoting
-                String functionCall = String.format(
-                    "techbd_udi_ingress.get_fhir_validation_issue_details(%s, %s, %s, %s)",
-                    igVersion != null ? "'" + igVersion.replace("'", "''") + "'" : "NULL",
-                    validationEngine != null ? "'" + validationEngine.replace("'", "''") + "'" : "NULL",
-                    issueDate != null ? "'" + issueDate.replace("'", "''") + "'" : "NULL",
-                    source != null ? "'" + source.replace("'", "''") + "'" : "NULL"
-                );
-                return DSL.table(functionCall);
-            }                           
+                return DSL.table(DSL.sql(schemaName + "." + storedProcName + "(?, ?, ?, ?)",
+                        igVersion, validationEngine, issueDate, source));
+            }
             case "get_interaction_http_request" -> {
                 objectMapper = new ObjectMapper();
                 Map<String, String> paramMap = objectMapper.readValue(paramsJson, Map.class);
-
                 String startDate = paramMap.get("start_date");
                 String endDate = paramMap.get("end_date");
-
-                // Create a table from the function call using raw SQL
-                String functionCall = String.format("techbd_udi_ingress.get_interaction_http_request('%s', '%s')",
-                    startDate, endDate);
-                return DSL.table(functionCall);
+                return DSL.table(DSL.sql(schemaName + "." + storedProcName + "(?, ?)", startDate, endDate));
             }
             case "get_fhir_screening_info" -> {
                 objectMapper = new ObjectMapper();
                 Map<String, String> paramMap = objectMapper.readValue(paramsJson, Map.class);
-
                 String qeName     = paramMap.get("p_qe_name");
                 String patientMrn = paramMap.get("p_patient_mrn");
                 String orgId      = paramMap.get("p_org_id");
-
-                // Inline literals — no ? placeholders, so jOOQ can't miscount bindings
-                String qeNameLit     = qeName     != null ? "'" + qeName.replace("'", "''")      + "'" : "NULL";
-                String patientMrnLit = patientMrn != null ? "'" + patientMrn.replace("'", "''")  + "'" : "NULL";
-                String orgIdLit      = orgId      != null ? "'" + orgId.replace("'", "''")       + "'" : "NULL";
-
-                String functionCall = String.format(
-                    "techbd_udi_ingress.get_fhir_screening_info(%s, %s, %s)",
-                    qeNameLit, patientMrnLit, orgIdLit
-                );
-
-                return DSL.table(functionCall);
-            }       
+                return DSL.table(DSL.sql(schemaName + "." + storedProcName + "(?, ?, ?)",
+                        qeName, patientMrn, orgId));
+            }
             case "get_interaction_csv_http_fhir_request_details" -> {
                 objectMapper = new ObjectMapper();
                 Map<String, String> paramMap = objectMapper.readValue(paramsJson, Map.class);
-
                 String sourceHubInteractionId = paramMap.get("p_source_hub_interaction_id");
-
-                // Create a table from the function call using raw SQL
-                String functionCall = String.format(
-                        "techbd_udi_ingress.get_interaction_csv_http_fhir_request_details('%s')",
-                        sourceHubInteractionId
-                );
-
-                return DSL.table(functionCall);
-            }                    
-            case "get_fhir_needs_attention_details", "get_missing_datalake_submission_details" ,"get_missing_techbydesigndisposition_details"  -> {
+                return DSL.table(DSL.sql(schemaName + "." + storedProcName + "(?)", sourceHubInteractionId));
+            }
+            case "get_fhir_needs_attention_details", "get_missing_datalake_submission_details", "get_missing_techbydesigndisposition_details" -> {
                 Map<String, LocalDate> dateMap = parseDates(paramsJson, objectMapper, formatter);
                 Map<String, String> paramsMap = objectMapper.readValue(paramsJson, Map.class);
                 String tenantId = paramsMap.get("tenant_id").toLowerCase();
                 LocalDate startDate = dateMap.get("start_date");
                 LocalDate endDate = dateMap.get("end_date");
-                 if (storedProcName.equals("get_fhir_needs_attention_details")) {
-                     return new GetFhirNeedsAttentionDetails()
-                                .call(tenantId, startDate, endDate);
-
-                    } else if (storedProcName.equals("get_missing_datalake_submission_details")) {
-                        return new GetMissingDatalakeSubmissionDetails()
-                                .call(tenantId, startDate, endDate);
-
-                    } else {
-                        return new GetMissingTechbydesigndispositionDetails()
-                                .call(tenantId, startDate, endDate);
-                    }
-                            }
+                if (storedProcName.equals("get_fhir_needs_attention_details")) {
+                    return new GetFhirNeedsAttentionDetails()
+                            .call(tenantId, startDate, endDate);
+                } else if (storedProcName.equals("get_missing_datalake_submission_details")) {
+                    return new GetMissingDatalakeSubmissionDetails()
+                            .call(tenantId, startDate, endDate);
+                } else {
+                    return new GetMissingTechbydesigndispositionDetails()
+                            .call(tenantId, startDate, endDate);
+                }
+            }
             default ->
                 throw new IllegalArgumentException("Invalid stored procedure name: " + storedProcName);
         }

@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
 import org.jooq.Condition;
 import org.jooq.DSLContext;
@@ -39,6 +40,7 @@ import jakarta.annotation.Nullable;
 public final class JooqRowsSupplier implements TabularRowsSupplier<JooqRowsSupplier.JooqProvenance> {
 
     static private final Logger LOG = LoggerFactory.getLogger(JooqRowsSupplier.class);
+    private static final Pattern VALID_COLUMN_NAME_PATTERN = Pattern.compile("^[a-zA-Z0-9_]+$");
 
     public record TypableTable(Table<?> table, boolean stronglyTyped) {
 
@@ -192,12 +194,24 @@ public final class JooqRowsSupplier implements TabularRowsSupplier<JooqRowsSuppl
             if (logger != null) {
                 logger.error("JooqRowsSupplier error", e);
             }
-            return new TabularRowsResponse<>(includeGeneratedSqlInResp ? provenance : null, null, -1,
-                    includeGeneratedSqlInErrorResp ? e.getMessage() : null);
+            return new TabularRowsResponse<>(null, null, -1,
+                    includeGeneratedSqlInErrorResp ? "An error occurred processing the request." : null);
         }
     }
 
     private Condition finalCondition;
+
+    private static void validateColumnName(final String name, final String context) {
+        if (name == null || !VALID_COLUMN_NAME_PATTERN.matcher(name).matches()) {
+            throw new IllegalArgumentException("Invalid column name in " + context + ": " + name);
+        }
+    }
+
+    private static void validateSortDirection(final String direction) {
+        if (!"asc".equals(direction) && !"desc".equals(direction)) {
+            throw new IllegalArgumentException("Invalid sort direction in sortModel: " + direction);
+        }
+    }
 
     @SuppressWarnings("unchecked")
     public JooqQuery query() {
@@ -208,6 +222,27 @@ public final class JooqRowsSupplier implements TabularRowsSupplier<JooqRowsSuppl
         final var groupByFields = new ArrayList<Field<?>>();
 
         finalCondition = null;
+
+        // Validate all user-supplied column identifiers upfront to prevent SQL injection
+        if (request.filterModel() != null) {
+            request.filterModel().keySet().forEach(f -> validateColumnName(f, "filterModel"));
+        }
+        if (request.rowGroupCols() != null) {
+            request.rowGroupCols().forEach(col -> validateColumnName(col.field(), "rowGroupCols"));
+        }
+        if (request.valueCols() != null) {
+            request.valueCols().forEach(col -> validateColumnName(col.field(), "valueCols"));
+        }
+        if (request.sortModel() != null) {
+            request.sortModel().forEach(sort -> {
+                validateColumnName(sort.colId(), "sortModel");
+                validateSortDirection(sort.sort());
+            });
+        }
+        if (request.aggregationFunctions() != null) {
+            request.aggregationFunctions().forEach(aggFunc ->
+                aggFunc.columns().forEach(col -> validateColumnName(col, "aggregationFunctions")));
+        }
 
         // // Adding columns to select
         // if (request.valueCols() != null)
