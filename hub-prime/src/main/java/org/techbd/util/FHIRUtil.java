@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -36,6 +37,9 @@ public class FHIRUtil {
     private static String BASE_FHIR_URL;
     public static final String BUNDLE = "bundle";
     private static final Logger LOG = LoggerFactory.getLogger(FHIRUtil.class);
+
+    private static final Set<String> SENSITIVE_HEADERS = Set.of("cookie", "authorization", "x-api-key", "set-cookie");
+    private static final Set<String> SENSITIVE_COOKIE_NAMES = Set.of("jsessionid");
     public FHIRUtil(AppConfig appConfig) {
         this.appConfig = appConfig;
     }
@@ -108,7 +112,7 @@ public class FHIRUtil {
                 .append(request.getQueryString() != null ? "?" + request.getQueryString() : "").toString());
         requestDetails.put(Constants.URI, request.getRequestURI());
         requestDetails.put(Constants.REQUEST_ID, UUID.randomUUID().toString());
-        requestDetails.put(Constants.REQUEST_SESSION_ID, request.getSession().getId());
+        requestDetails.put(Constants.REQUEST_SESSION_ID, null);
         requestDetails.put(Constants.REMOTE_ADDR, request.getRemoteAddr());
         requestDetails.put(Constants.REMOTE_HOST, request.getRemoteHost());
         requestDetails.put(Constants.REMOTE_PORT, request.getRemotePort());
@@ -133,12 +137,15 @@ public class FHIRUtil {
         requestDetails.put(Constants.CONTEXT_PATH, request.getContextPath());
         requestDetails.put(Constants.SERVLET_PATH, request.getServletPath());
         requestDetails.put(Constants.PATH_INFO, request.getPathInfo());
-        requestDetails.put(Constants.REQUESTED_SESSION_ID, request.getRequestedSessionId());
+        requestDetails.put(Constants.REQUESTED_SESSION_ID, null);
         requestDetails.put(Constants.REQUESTED_SESSION_ID_VALID, request.isRequestedSessionIdValid());
         requestDetails.put(Constants.LOCALE, request.getLocale().toString());
 
         Map<String, String> headers = new HashMap<>();
-        Collections.list(request.getHeaderNames()).forEach(name -> headers.put(name, request.getHeader(name)));
+        Collections.list(request.getHeaderNames())
+                .stream()
+                .filter(name -> !SENSITIVE_HEADERS.contains(name.toLowerCase()))
+                .forEach(name -> headers.put(name, request.getHeader(name)));
         requestDetails.put(Constants.HEADERS, headers);
 
         Map<String, String[]> parameterMap = request.getParameterMap();
@@ -167,7 +174,7 @@ public class FHIRUtil {
                     .map(cookie -> {
                         Map<String, Object> map = new HashMap<>();
                         map.put("name", cookie.getName());
-                        map.put("value", cookie.getValue());
+                        map.put("value", SENSITIVE_COOKIE_NAMES.contains(cookie.getName().toLowerCase()) ? "[REDACTED]" : cookie.getValue());
                         map.put("domain", cookie.getDomain());
                         map.put("path", cookie.getPath());
                         map.put("maxAge", cookie.getMaxAge());

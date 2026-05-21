@@ -6,6 +6,7 @@ import java.time.ZonedDateTime;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 import org.techbd.ingest.commons.Constants;
 import org.techbd.ingest.commons.MessageSourceType;
@@ -19,6 +20,8 @@ import org.techbd.ingest.util.TemplateLogger;
 import jakarta.servlet.http.HttpServletRequest;
 
 public abstract class AbstractMessageSourceProvider implements MessageSourceProvider {
+
+    private static final Set<String> SENSITIVE_HEADERS = Set.of("cookie", "authorization", "x-api-key", "set-cookie");
 
     private final TemplateLogger LOG;
     private final AppConfig appConfig;
@@ -49,8 +52,9 @@ public abstract class AbstractMessageSourceProvider implements MessageSourceProv
             Enumeration<String> headerNames = request.getHeaderNames();
             while (headerNames.hasMoreElements()) {
                 String header = headerNames.nextElement();
-                String value = request.getHeader(header);
-                headers.put(header, value);
+                if (!SENSITIVE_HEADERS.contains(header.toLowerCase())) {
+                    headers.put(header, request.getHeader(header));
+                }
             }
         }
         String timestamp = String.valueOf(now.toEpochMilli());
