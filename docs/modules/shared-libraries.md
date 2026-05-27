@@ -41,7 +41,7 @@ hub-core-lib/
 │   │       └── FHIRService.java         # FHIR forwarding to SHIN-NY
 │   └── util/                            # Utility helpers
 └── src/main/resources/
-    └── nexus-core-lib/                  # Bundled configuration for nexus modules
+    └── nexus-core-lib/                  # Per-profile YAML configs loaded by nexus services via SpringContextHolder
         ├── application.yml
         ├── application-devl.yml
         ├── application-sandbox.yml

@@ -74,8 +74,14 @@ sed -i 's|https://shinny.org/ImplementationGuide/HRSN|http://localhost:8000/Impl
     path/to/fixture.json
 ```
 
-Option B — Redirect DNS by modifying `/etc/resolv.conf` to point `shinny.org`
-to a local web server hosting the development IG.
+Option B — Add an entry to `/etc/hosts` to redirect `shinny.org` to your
+local web server hosting the development IG:
+```
+127.0.0.1  shinny.org
+```
+Note: this approach requires that your local server serves the IG over HTTPS
+(matching the canonical `https://shinny.org/…` URL) or that all references
+are pre-processed as in Option A.
 
 #### IG Package Version Configuration
 
