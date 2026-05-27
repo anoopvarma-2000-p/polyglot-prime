@@ -3,6 +3,8 @@ package org.techbd.service.fhir;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -617,6 +619,45 @@ public class FHIRService {
 		}
 	}
 
+	private void validateDatalakeApiUrl(final String url) {
+		if (url == null || url.isBlank()) {
+			return;
+		}
+		final URI requestedUri;
+		try {
+			requestedUri = new URI(url);
+		} catch (URISyntaxException e) {
+			throw new IllegalArgumentException("Invalid Datalake API URL: " + e.getMessage());
+		}
+		if (!"https".equalsIgnoreCase(requestedUri.getScheme())) {
+			throw new IllegalArgumentException("Datalake API URL must use HTTPS scheme, rejected: " + url);
+		}
+		final String requestedHost = requestedUri.getHost();
+		if (requestedHost == null || requestedHost.isBlank()) {
+			throw new IllegalArgumentException("Datalake API URL must contain a valid host");
+		}
+		final List<String> configuredAllowed = coreAppConfig.getAllowedDatalakeApiUrls();
+		final List<String> effectiveAllowed;
+		if (configuredAllowed != null && !configuredAllowed.isEmpty()) {
+			effectiveAllowed = configuredAllowed;
+		} else {
+			final String defaultUrl = coreAppConfig.getDefaultDatalakeApiUrl();
+			effectiveAllowed = (defaultUrl != null && !defaultUrl.isBlank()) ? List.of(defaultUrl) : List.of();
+		}
+		final boolean hostAllowed = effectiveAllowed.stream().anyMatch(allowedUrl -> {
+			try {
+				final String allowedHost = new URI(allowedUrl).getHost();
+				return requestedHost.equalsIgnoreCase(allowedHost);
+			} catch (URISyntaxException e) {
+				return false;
+			}
+		});
+		if (!hostAllowed) {
+			throw new IllegalArgumentException(
+					"Datalake API URL host '" + requestedHost + "' is not in the allowed list");
+		}
+	}
+
 	public void sendToScoringEngine(
 			final Map<String,Object> requestParameters,
 			final String scoringEngineApiURL,
@@ -658,6 +699,7 @@ public class FHIRService {
 								});
 					}
 				}
+				validateDatalakeApiUrl(scoringEngineApiURL);
 				final var dataLakeApiBaseURL = Optional.ofNullable(scoringEngineApiURL)
 						.filter(s -> !s.isEmpty())
 						.orElse(coreAppConfig.getDefaultDatalakeApiUrl());
