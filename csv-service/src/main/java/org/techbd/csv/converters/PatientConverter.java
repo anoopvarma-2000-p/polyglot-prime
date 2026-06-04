@@ -112,7 +112,7 @@ public class PatientConverter extends BaseConverter {
         // populatePatientText(patient, demographicData);
         BundleEntryComponent bundleEntryComponent = new BundleEntryComponent();
         bundleEntryComponent.setFullUrl(fullUrl);
-        bundleEntryComponent.setRequest(new Bundle.BundleEntryRequestComponent().setMethod(HTTPVerb.POST).setUrl(baseUrl + "Patient/" + patient.getId()));
+        bundleEntryComponent.setRequest(new Bundle.BundleEntryRequestComponent().setMethod(HTTPVerb.POST).setUrl(baseUrl + "/Patient/" + patient.getId()));
         bundleEntryComponent.setResource(patient);
         LOG.info("PatientConverter :: convert  END for transaction id :{}", interactionId);
         return List.of(bundleEntryComponent);
@@ -122,29 +122,28 @@ public class PatientConverter extends BaseConverter {
         if (StringUtils.isNotEmpty(demographicData.getRaceCode())) {
             Extension raceExtension = new Extension("http://hl7.org/fhir/us/core/StructureDefinition/us-core-race");
 
-            String[] raceCodes = fetchCode(demographicData.getRaceCode(), CsvConstants.RACE_CODE, interactionId).split(";");
-
-            String[] raceDescriptions = new String[raceCodes.length];
-            String raceCodeDesc = demographicData.getRaceCodeDescription();
+            String[] codes = demographicData.getRaceCode().split(";");
+            String[] displays = StringUtils.defaultString(demographicData.getRaceCodeDescription()).split(";");
             StringBuilder raceTextBuilder = new StringBuilder();
 
-            for (int i = 0; i < raceCodes.length; i++) {
-                String trimmedCode = raceCodes[i].trim();
-                String display = fetchDisplay(trimmedCode, raceCodeDesc, CsvConstants.RACE_CODE, interactionId);
+            for (int i = 0; i < codes.length; i++) {
+                String raceCode = codes[i].trim();
+                if (StringUtils.isNotEmpty(raceCode)) {
+                    String code = fetchCode(raceCode, CsvConstants.RACE_CODE, interactionId);
+                    String display = (i < displays.length) ? displays[i].trim() : null;
+                    display = fetchDisplay(code, display, CsvConstants.RACE_CODE, interactionId);
+                    Extension ombCategoryExtension = new Extension(getOmbRaceCategory(code, interactionId));
+                    ombCategoryExtension.setValue(new Coding()
+                            .setSystem(fetchSystem(code, demographicData.getRaceCodeSystem(), CsvConstants.RACE_CODE, interactionId))
+                            .setCode(code)
+                            .setDisplay(display));
+                    raceExtension.addExtension(ombCategoryExtension);
 
-                raceDescriptions[i] = display;
-                Extension ombCategoryExtension = new Extension(getOmbRaceCategory(trimmedCode, interactionId));
-                String system = fetchSystem(raceCodes[i].trim(), demographicData.getRaceCodeSystem(), CsvConstants.RACE_CODE, interactionId);
-                ombCategoryExtension.setValue(new Coding()
-                        .setSystem(system)
-                        .setCode(trimmedCode)
-                        .setDisplay(display));
-                raceExtension.addExtension(ombCategoryExtension);
+                    if (StringUtils.isNotBlank(display)) {
+                        if (raceTextBuilder.length() > 0) raceTextBuilder.append(", ");
+                        raceTextBuilder.append(display.trim());
 
-                if (StringUtils.isNotBlank(display)) {
-                    if (raceTextBuilder.length() > 0) raceTextBuilder.append(", ");
-                    raceTextBuilder.append(display.trim());
-
+                    }
                 }
             }
 
@@ -159,7 +158,7 @@ public class PatientConverter extends BaseConverter {
             String[] rawCodes = demographicData.getEthnicityCode().split(";");
             List<String> validCodes = Arrays.stream(rawCodes)
                 .map(String::trim)
-                .filter(code -> !("ASKU".equalsIgnoreCase(code) || "UNK".equalsIgnoreCase(code)))
+                .filter(code -> !("ASKU".equalsIgnoreCase(code) || "UNK".equalsIgnoreCase(code)|| "asked-declined".equalsIgnoreCase(code)))
                 .collect(Collectors.toList());
 
             if (!validCodes.isEmpty()) {

@@ -7,6 +7,9 @@ import java.io.InputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -75,6 +78,17 @@ public class SoapFaultEnhancementFilter extends OncePerRequestFilter {
             return;
         }
 
+        // ── MTOM bypass ───────────────────────────────────────────────────────
+        // MTOM strategies write directly to the response output stream inside
+        // WsaHeaderInterceptor.handleResponse(). Wrapping the response in
+        // ResponseWrapper would cause the bytes to be buffered and then written
+        // a second time by the filter, truncating or doubling the body.
+        // Skip capture entirely when responseType signals MTOM output.
+        String responseType = resolveResponseType(request);
+        if (isMtomResponseType(responseType)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
         // Wrap request to capture body
         CachedBodyHttpServletRequest cachedRequest = new CachedBodyHttpServletRequest(request);
         java.util.Map<String, String> capturedHeaders = extractHeaders(request);
@@ -121,6 +135,30 @@ public class SoapFaultEnhancementFilter extends OncePerRequestFilter {
     }
 
     /**
+     * Reads responseType from request attribute (set by InteractionsFilter)
+     * or from forwarded header (set by SoapForwarderService).
+     */
+    private String resolveResponseType(HttpServletRequest request) {
+        String rt = (String) request.getAttribute(Constants.RESPONSE_TYPE);
+        if (rt == null || rt.isBlank()) {
+            rt = request.getHeader(Constants.RESPONSE_TYPE);
+        }
+        return rt;
+    }
+
+    /**
+     * Returns true for any responseType that causes the MTOM strategy to
+     * write directly to the servlet output stream.
+     */
+    private boolean isMtomResponseType(String responseType) {
+        if (responseType == null || responseType.isBlank()) {
+            return false;
+        }
+        String normalized = responseType.trim().toLowerCase();
+        return normalized.equals("mtom") || normalized.equals("mtom_trubridge");
+    }
+
+    /**
      * Enhance SOAP fault with error trace ID
      * Only adds if not already present to avoid duplicates
      */
@@ -155,7 +193,7 @@ public class SoapFaultEnhancementFilter extends OncePerRequestFilter {
                 
                 // Log to CloudWatch
                 LogUtil.logDetailedError(
-                    400,
+                    500,
                     "SOAP Fault [" + faultCode + "]: " + faultString, 
                     interactionId, 
                     errorTraceId, 
@@ -276,12 +314,24 @@ public class SoapFaultEnhancementFilter extends OncePerRequestFilter {
                         headers.size(), destinationPort, context.getInteractionId());
             }
             
+            Instant now = Instant.now();
+
+            // Populate timestamp if not set
+            if (context.getTimestamp() == null) {
+                String timestamp = String.valueOf(now.toEpochMilli());
+                context.setTimestamp(timestamp);
+            }
+
             // Populate uploadTime if not set
             if (context.getUploadTime() == null) {
-                context.setUploadTime(java.time.ZonedDateTime.now());
-                logger.info("SoapFaultEnhancementFilter:: Set uploadTime to current time for interactionId={}", 
-                        context.getInteractionId());
+                ZonedDateTime uploadTime = now.atZone(ZoneOffset.UTC);
+                context.setUploadTime(uploadTime);
             }
+
+            logger.info("SoapFaultEnhancementFilter:: timestamp={} uploadTime={} for interactionId={}",
+                    context.getTimestamp(),
+                    context.getUploadTime(),
+                    context.getInteractionId());
             
             // Determine MessageSourceType based on SOAP message content
             org.techbd.ingest.commons.MessageSourceType messageSourceType = determineMessageSourceType(requestBody);

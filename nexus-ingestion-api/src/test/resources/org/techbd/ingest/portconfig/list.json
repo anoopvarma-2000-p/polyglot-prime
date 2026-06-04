@@ -1,0 +1,225 @@
+[
+    {
+        "port": 2575,
+        "responseType": "outbound",
+        "protocol": "TCP"
+    },
+    {
+        "sourceId":"netspective",
+        "msgType":"pnr",
+        "protocol": "HTTP",
+        "route": "/hold",
+        "dataDir": "/outbound",
+        "metadataDir": "/outbound",
+        "ackContentType": "application/soap+xml"
+    },
+    {
+        "sourceId": "netspective_m",
+        "msgType": "pnr",
+        "protocol": "HTTP",
+        "route": "/hold",
+        "dataDir": "/outbound",
+        "metadataDir": "/outbound",
+        "responseType": "mtom"
+    },
+    {
+        "sourceId": "netspective_mt",
+        "msgType": "pnr",
+        "protocol": "HTTP",
+        "route": "/hold",
+        "dataDir": "/outbound",
+        "metadataDir": "/outbound",
+        "responseType": "mtom_trubridge"
+    },
+    {
+        "port": 6555,
+        "responseType": "tcp",
+        "protocol": "TCP",
+        "route": "/hold",
+        "dataDir": "/outbound",
+        "metadataDir": "/outbound",
+        "queue": "test.fifo",
+         "keepAliveTimeout": 20
+    },
+     {
+        "port": 6556,
+        "responseType": "tcp",
+        "protocol": "TCP",
+        "route": "/hold",
+        "dataDir": "/holdtest",
+        "metadataDir": "/holdtest",
+        "queue": "test.fifo"
+    },
+     {
+        "port": 6557,
+        "responseType": "tcp",
+        "protocol": "TCP",
+        "dataDir": "/test",
+        "metadataDir": "/test"
+    },
+       {
+        "port": 5555,
+        "responseType": "outbound",
+        "protocol": "TCP",
+        "route": "/hold",
+        "dataDir": "/outbound",
+        "metadataDir": "/outbound",
+        "queue": "test.fifo",
+         "keepAliveTimeout": 20
+    },
+    {
+        "port": 5555,
+        "responseType": "",
+        "protocol": "",
+        "route": "/hold",
+        "dataDir": "/http",
+        "metadataDir": "/outbound",
+        "queue": "test.fifo",
+         "keepAliveTimeout": 20
+    },
+    {
+        "port": 5556,
+        "responseType": "pnr",
+        "protocol": "http",
+        "route": "/xds/XDSbRepositoryWS",
+        "dataDir": "/outbound",
+        "metadataDir": "/outbound",
+        "queue": "test.fifo",
+         "keepAliveTimeout": 20
+    },
+    {
+        "sourceId":"netspective",
+        "msgType":"pix",
+        "protocol": "TCP",
+        "route": "/",
+        "queue": "txd-sbx-util-queue.fifo",
+        "dataDir": "/outbound",
+        "metadataDir": "/outbound",
+         "ackContentType": "application/soap+xml"
+    },
+    {
+        "port": 3575,
+        "responseType": "mllp",
+        "protocol": "TCP",
+        "route": "/",
+        "queue": "txd-sbx-util-queue.fifo",
+        "dataDir": "/outbound",
+        "metadataDir": "/outbound",
+        "ackContentType": "application/soap+xml"
+    },
+    {
+        "port": 9203,
+        "responseType": "pnr",
+        "protocol": "HTTP",
+        "whitelistIps": [
+            "0.0.0.0/0"
+        ],
+        "mtls": "txd",
+        "execType": "async",
+        "trafficTo": "hl7",
+        "route": "/hold",
+        "queue": "txd-sbx-ccd-queue.fifo",
+        "dataDir": "/ccd",
+        "metadataDir": ""
+    },
+    {
+        "port": 9204,
+        "responseType": "pnr",
+        "protocol": "HTTP",
+        "whitelistIps": [
+            "0.0.0.0/0"
+        ],
+        "mtls": "txd-sbx",
+        "execType": "async",
+        "trafficTo": "hl7",
+        "route": "/hold",
+        "queue": "txd-sbx-ccd-queue.fifo",
+        "dataDir": "/ccd",
+        "metadataDir": ""
+    },
+    {
+        "port": 9050,
+        "responseType": "pix",
+        "protocol": "HTTP",
+        "whitelistIps": [
+            "0.0.0.0/0"
+        ],
+        "execType": "sync",
+        "trafficTo": "hl7",
+        "route": "/",
+        "queue": "txd-sbx-ccd-queue.fifo",
+        "dataDir": "/ccd",
+        "metadataDir": ""
+    },
+    {
+        "port": 9000,
+        "responseType": "",
+        "protocol": "HTTP",
+        "whitelistIps": [
+            "0.0.0.0/0"
+        ],
+        
+        "execType": "sync",
+        "trafficTo": "util"
+    },
+    {
+        "port": 9001,
+        "responseType": "mtom",
+        "protocol": "HTTP",
+        "whitelistIps": [
+            "0.0.0.0/0"
+        ],
+        "execType": "sync",
+        "trafficTo": "util"
+    },
+    {
+        "port": 9002,
+        "responseType": "mtom_trubridge",
+        "protocol": "HTTP",
+        "whitelistIps": [
+            "0.0.0.0/0"
+        ],
+        "execType": "sync",
+        "trafficTo": "util"
+    },
+    {
+        "port": 9003,
+        "responseType": "",
+        "protocol": "HTTP",
+        "whitelistIps": [
+            "0.0.0.0/0"
+        ],
+        "execType": "sync",
+        "trafficTo": "util"
+    },
+    {
+        "port": 9004,
+        "responseType": "",
+        "protocol": "HTTP",
+        "whitelistIps": [
+            "0.0.0.0/0"
+        ],
+        "execType": "sync",
+        "trafficTo": "util"
+    },
+    {
+        "port": 9005,
+        "responseType": "",
+        "protocol": "HTTP",
+        "whitelistIps": [
+            "0.0.0.0/0"
+        ],
+        "execType": "sync",
+        "trafficTo": "util"
+    },
+    {
+        "port": 9006,
+        "responseType": "",
+        "protocol": "HTTP",
+        "whitelistIps": [
+            "0.0.0.0/0"
+        ],
+        "execType": "sync",
+        "trafficTo": "util"
+    }
+]

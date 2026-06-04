@@ -39,6 +39,7 @@ import org.techbd.corelib.config.Constants;
 import org.techbd.corelib.config.Helpers;
 import org.techbd.corelib.service.dataledger.DataLedgerApiClient;
 import org.techbd.corelib.util.CoreFHIRUtil;
+import org.techbd.corelib.util.UuidUtil;
 import org.techbd.fhir.config.AppConfig;
 import org.techbd.fhir.service.FHIRService;
 import org.techbd.fhir.service.engine.OrchestrationEngine;
@@ -145,7 +146,13 @@ public class FhirController {
                         @Parameter(description = "Optional header to specify master interaction ID.", required = false) @RequestHeader(value = "X-TechBD-Master-Interaction-ID", required = false) String masterInteractionId,
                         @Parameter(description = "Optional header to provide elaboration details.", required = false) @RequestHeader(value = "X-TechBD-Elaboration", required = false) String elaboration,
                         @Parameter(description = "Optional header to specify group interaction ID.", required = false) @RequestHeader(value = "X-TechBD-Group-Interaction-ID", required = false) String groupInteractionId, @Parameter(description = "Optional header to specify interaction ID.", required = false) @RequestHeader(value = "X-TechBD-Interaction-ID", required = false) String interactionId,         @Parameter(description = "Optional header to specify override request URI.", required = false)
-                        @RequestHeader(value = "X-TechBD-Override-Request-URI", required = false) String requestUriToBeOverridden,                        
+                        @RequestHeader(value = "X-TechBD-Override-Request-URI", required = false) String requestUriToBeOverridden,  
+                        @Parameter(description = "Optional header for health check.", required = false)
+                        @RequestHeader(value = "X-TechBD-HealthCheck", required = false, defaultValue = "false") String healthCheck,
+                        @Parameter(description = "Optional header to specify data ledgder tracking.", required = false)@RequestHeader(value = "X-TechBD-Data-Ledger-Tracking", required = false, defaultValue = "false")
+                        boolean dataLedgerTracking,
+                        @Parameter(description = "Optional header to specify data ledger diagnostics.", required = false)@RequestHeader(value = "X-TechBD-Data-Ledger-diagnostics", required = false, defaultValue = "false")
+                        boolean dataLedgerDiagnostics,                       
                         HttpServletRequest request, HttpServletResponse response) throws IOException {
                 Span span = tracer.spanBuilder("FhirController.validateBundle").startSpan();
                 try {
@@ -159,8 +166,12 @@ public class FhirController {
                                 deleteJSessionCookie(request, response);
                         }
                         // request = new CustomRequestWrapper(request, payload);
-                        Map<String, Object> headers = CoreFHIRUtil.buildHeaderParametersMap(tenantId, null, null,
-                        requestUriToBeOverridden, null, null, null, null,requestedIgVersion );
+                        final String rawHealthCheckHeader = request.getHeader(Constants.HEALTH_CHECK_HEADER);
+                        final String resolvedHealthCheck = firstNonBlank(rawHealthCheckHeader, healthCheck, "false");
+                        LOG.debug("FhirController.validateBundle - raw healthCheck header: '{}', bound healthCheck: '{}', resolved healthCheck: '{}'",
+                                rawHealthCheckHeader, healthCheck, resolvedHealthCheck);
+                        Map<String, Object> headers = CoreFHIRUtil.buildHeaderParametersMap(tenantId, null, 
+                        requestUriToBeOverridden, null, resolvedHealthCheck, null, null,requestedIgVersion );
                         Map <String,Object> requestDetailsMap = CoreFHIRUtil.extractRequestDetails(request);            
                         LOG.debug("FhirController.validateBundle - sourceType: '{}', groupInteractionId: '{}', masterInteractionId: '{}'", 
                                 sourceType, groupInteractionId, masterInteractionId);
@@ -168,11 +179,14 @@ public class FhirController {
                         if (interactionId != null && !interactionId.trim().isEmpty()) {
                             requestDetailsMap.put(Constants.INTERACTION_ID, interactionId.trim());
                         } else {
-                            requestDetailsMap.put(Constants.INTERACTION_ID, UUID.randomUUID().toString());
+                            requestDetailsMap.put(Constants.INTERACTION_ID,UuidUtil.generateUuid());
                         }                                        
                         requestDetailsMap.put(Constants.OBSERVABILITY_METRIC_INTERACTION_START_TIME, Instant.now().toString());
                         requestDetailsMap.put(Constants.ELABORATION, elaboration);
+                        requestDetailsMap.put(Constants.DATA_LEDGER_TRACKING, dataLedgerTracking);
+                        requestDetailsMap.put(Constants.DATA_LEDGER_DIAGNOSTICS, dataLedgerDiagnostics);
                         requestDetailsMap.putAll(headers);
+                        requestDetailsMap.put(Constants.HEALTH_CHECK_HEADER, resolvedHealthCheck);
                         Map<String, Object> responseParameters = new HashMap<>();
                         final var result = fhirService.processBundle(payload, requestDetailsMap,  responseParameters);
                         CoreFHIRUtil.addCookieAndHeadersToResponse(response, responseParameters, requestDetailsMap);
@@ -189,21 +203,33 @@ public class FhirController {
                         @Parameter(description = "<b>mandatory</b> path variable to specify the bundle session ID.", required = true) @PathVariable String bundleSessionId,
                         final Model model, HttpServletRequest request) {
                 try {
+                        String normalizedBundleSessionId = normalizeBundleSessionId(bundleSessionId);
                         final var result = primaryDslContext.select()
                                         .from(INTERACTION_HTTP_REQUEST)
-                                        .where(INTERACTION_HTTP_REQUEST.INTERACTION_ID.eq(bundleSessionId))
+                                        .where(INTERACTION_HTTP_REQUEST.INTERACTION_ID.eq(normalizedBundleSessionId))
                                         .fetch();
+                        if (result.isEmpty()) {
+                                return ResponseEntity.ok(Map.of(
+                                                "status", "Success",
+                                                "message",
+                                                "No record found for bundleSessionId: " + normalizedBundleSessionId));
+                        }
+                        // When record found - return actual data, not a message
                         return Configuration.objectMapper.writeValueAsString(result.intoMaps());
+                         } catch (IllegalArgumentException e) {
+                        LOG.error("Validation error for bundleSessionId='{}': {}", bundleSessionId, e.getMessage());
+                        return ResponseEntity.badRequest().body(Map.of(
+                                        "status", "Error",
+                                        "message", e.getMessage()));
                 } catch (Exception e) {
                         LOG.error("Error executing JOOQ query for retrieving SAT_INTERACTION_HTTP_REQUEST.HUB_INTERACTION_ID for "
                                         + bundleSessionId, e);
-                        return String.format("""
-                                          "error": "%s",
-                                          "bundleSessionId": "%s"
-                                        """.replace("\n", "%n"), e.toString(), bundleSessionId);
+                        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                                "status", "Error",
+                                "message", "An unexpected error occurred while fetching status for bundleSessionId: " + bundleSessionId));
                 }
         }
-
+        
         @Operation(summary = "Send mock JSON payloads pretending to be from SHIN-NY Data Lake 1115 Waiver validation (scorecard) server.")
         @GetMapping("/mock/shinny-data-lake/1115-validate/{resourcePath}.json")
         public ResponseEntity<String> getJsonFile(
@@ -252,19 +278,29 @@ public class FhirController {
         })
         @ResponseBody
         public Object getFailedNyecSubmissions(
-                        @RequestHeader("X-TechBD-StartDate") String startDateStr,
-                        @RequestHeader("X-TechBD-EndDate") String endDateStr,
-                        @RequestHeader(value = "X-TechBD-Tenant-ID", required = false) String tenantId,
-                        @RequestHeader(value = "X-TechBD-IncludeDetails", required = false) boolean includeDetails,
+                        @Parameter(description = "Parameter to specify the Start Date. This is a <b>mandatory</b> header.", required = true) @RequestHeader(value = "X-TechBD-StartDate", required = false) String startDateStr,
+                        @Parameter(description = "Parameter to specify the End Date. This is a <b>mandatory</b> header.", required = true) @RequestHeader(value = "X-TechBD-EndDate", required = false) String endDateStr,
+                        @Parameter(description = "Parameter to specify the Tenant ID. This is an <b>optional</b> header.", required = false) @RequestHeader(value = "X-TechBD-Tenant-ID", required = false) String tenantId,
+                        @Parameter(description = "Parameter to specify whether to include detailed results. This is an <b>optional</b> header.", required = false) @RequestHeader(value = "X-TechBD-IncludeDetails", required = false) String includeDetailsHeader,
                         HttpServletRequest request) {
 
-                UUID requestId = UUID.randomUUID();
+                UUID requestId = UUID.fromString(UuidUtil.generateUuid());
+                List<String> missingDateHeaders = missingDateHeaders(startDateStr, endDateStr);
+                if (!missingDateHeaders.isEmpty()) {
+                        String headerLabel = missingDateHeaders.size() == 1 ? "header" : "headers";
+                        LOG.error("Missing required request {} {} for requestId {}", headerLabel, missingDateHeaders, requestId);
+                        Map<String, String> responseBody = new java.util.LinkedHashMap<>();
+                        responseBody.put("status", "Error");
+                        responseBody.put("message", "Validation error: " + missingDateHeadersMessage(missingDateHeaders));
+                        return ResponseEntity.badRequest().body(responseBody);
+                }
 
                 try {
-                        if (startDateStr.equals(endDateStr)) {
-                                throw new IllegalArgumentException(
-                                                "startDate cannot be same as endDate for requestId: " + requestId);
-                        }
+                        boolean includeDetails = resolveOptionalBooleanHeader(
+                                        "X-TechBD-IncludeDetails",
+                                        includeDetailsHeader,
+                                        false);
+
                         OffsetDateTime startDate = parseFlexibleDate(startDateStr, true);
                         OffsetDateTime endDate = parseFlexibleDate(endDateStr, false);
 
@@ -274,39 +310,41 @@ public class FhirController {
                                                 "endDate cannot be before startDate for requestId: " + requestId);
                         }
 
+                        String resolvedTenantId = tenantId == null || tenantId.isBlank() ? null : tenantId.trim();
                         LOG.info("Fetching failed NYEC submissions from {} to {} for requestId {} | tenantId={}",
-                                        startDate, endDate, requestId, tenantId != null ? tenantId : "ALL");
+                                        startDateStr, endDateStr, requestId,
+                                        resolvedTenantId != null ? resolvedTenantId : "ALL");
                         return fhirService.getFailedNyecSubmissionBundles(
-                                        startDate,
-                                        endDate,tenantId,includeDetails);
+                                        startDateStr,
+                                        endDateStr,resolvedTenantId,includeDetails);
 
                 } catch (DateTimeParseException e) {
                         LOG.error("Invalid date-time format for startDate='{}' or endDate='{}' for requestId {}",
                                         startDateStr, endDateStr, requestId, e);
-                        return Map.of(
+                        return ResponseEntity.badRequest().body(Map.of(
                                         "status", "Error",
                                         "message",
                                         "Invalid date-time format. Expected one of: yyyy-MM-dd or yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
-                                        "requestId", requestId.toString());
+                                        "requestId", requestId.toString()));
                 } catch (IllegalArgumentException e) {
                         LOG.error("Validation error for requestId {}: {}", requestId, e.getMessage());
-                        return Map.of(
+                        return ResponseEntity.badRequest().body(Map.of(
                                         "status", "Error",
                                         "message", e.getMessage(),
-                                        "requestId", requestId.toString());
+                                        "requestId", requestId.toString()));
                 } catch (Exception e) {
                         LOG.error("Unexpected error fetching failed NYEC submissions for requestId {}", requestId, e);
-                        return Map.of(
+                        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
                                         "status", "Error",
                                         "message", "An unexpected error occurred while fetching failed submissions",
-                                        "requestId", requestId.toString());
+                                        "requestId", requestId.toString()));
                 }
         }          
      
         @GetMapping(value = { "/Bundles/status/operation-outcome", "/Bundles/status/operation-outcome/" })
         @Operation(summary = "Retrieve OperationOutcome(s) for a Bundle or Interaction", description = """
                         Fetches OperationOutcome resources for a given Bundle ID or Interaction ID.
-                        Exactly ONE of X-TechBD-Bundle-ID or X-TechBD-Interaction-ID must be provided.
+                        At least one of X-TechBD-Bundle-ID or X-TechBD-Interaction-ID must be provided.
                         """)
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "200", description = "Successfully retrieved OperationOutcome(s)."),
@@ -315,13 +353,17 @@ public class FhirController {
         })
         @ResponseBody
         public Object getOperationOutcomes(
-                        @RequestHeader(value = "X-TechBD-Tenant-ID", required = true) String tenantId,
-                        @RequestHeader(value = "X-TechBD-Bundle-ID", required = false) String bundleId,
-                        @RequestHeader(value = "X-TechBD-Interaction-ID", required = false) String interactionId,
+                        @Parameter(description = "Parameter to specify the Tenant ID. This is a <b>mandatory</b> parameter.", required = true) @RequestHeader(value = "X-TechBD-Tenant-ID", required = true) String tenantId,
+                        @Parameter(description = "Parameter to specify the Bundle ID used to fetch OperationOutcome. This is an <b>optional</b> parameter. Either bundleId or interactionId must be provided.", required = false) @RequestHeader(value = "X-TechBD-Bundle-ID", required = false) String bundleId,
+                        @Parameter(description = "Parameter to specify the Interaction ID used to fetch OperationOutcome. This is an <b>optional</b> parameter. Either bundleId or interactionId must be provided.", required = false) @RequestHeader(value = "X-TechBD-Interaction-ID", required = false) String interactionId,
                         HttpServletRequest request) {
 
-                UUID requestId = UUID.randomUUID();
-                if (tenantId == null || tenantId.isBlank()) {
+                UUID requestId = UUID.fromString(UuidUtil.generateUuid());
+                tenantId = trimToNull(tenantId);
+                bundleId = trimToNull(bundleId);
+                interactionId = trimToNull(interactionId);
+
+                if (tenantId == null) {
                         throw new IllegalArgumentException(
                                         "Invalid request. TenantId is required.");
                 }
@@ -331,12 +373,78 @@ public class FhirController {
                 }
 
                 LOG.info(
-                                "Fetching OperationOutcome(s) for requestId={} | tenantId={} | bundleId={} | interactionId={}",
+                        "Fetching OperationOutcome(s) for requestId={} | tenantId={} | bundleId={} | interactionId={}",
                                 requestId,
-                                tenantId != null ? tenantId : "ALL",
+                                tenantId,
                                 bundleId,
                                 interactionId);
                 return fhirService.getOperationOutcomeSendToNyec(interactionId, bundleId, tenantId);
+        }
+
+        private String normalizeBundleSessionId(String bundleSessionId) {
+                String normalizedBundleSessionId = trimToNull(bundleSessionId);
+                if (normalizedBundleSessionId == null) {
+                        throw new IllegalArgumentException("Invalid request. bundleSessionId is required.");
+                }
+
+                try {
+                        UUID parsedBundleSessionId = UUID.fromString(normalizedBundleSessionId);
+                        if (!parsedBundleSessionId.toString()
+                                        .equals(normalizedBundleSessionId.toLowerCase(java.util.Locale.ROOT))) {
+                                throw new IllegalArgumentException();
+                        }
+                } catch (IllegalArgumentException e) {
+                        throw new IllegalArgumentException("Invalid request. bundleSessionId must be a valid UUID.");
+                }
+
+                return normalizedBundleSessionId;
+        }
+
+        private String trimToNull(String value) {
+                if (value == null) {
+                        return null;
+                }
+                String trimmedValue = value.trim();
+                return trimmedValue.isEmpty() ? null : trimmedValue;
+        }
+
+        private List<String> missingDateHeaders(String startDateStr, String endDateStr) {
+                List<String> missingHeaders = new java.util.ArrayList<>();
+                if (startDateStr == null || startDateStr.isBlank()) {
+                        missingHeaders.add("X-TechBD-StartDate");
+                }
+                if (endDateStr == null || endDateStr.isBlank()) {
+                        missingHeaders.add("X-TechBD-EndDate");
+                }
+                return missingHeaders;
+        }
+
+        private String missingDateHeadersMessage(List<String> missingHeaders) {
+                if (missingHeaders.size() == 1) {
+                        return "The required request header '" + missingHeaders.get(0) + "' is missing";
+                }
+
+                String quotedHeaders = missingHeaders.stream()
+                                .map(header -> "'" + header + "'")
+                                .collect(java.util.stream.Collectors.joining(" and "));
+                return "The required request headers " + quotedHeaders + " are missing";
+        }
+
+        private boolean resolveOptionalBooleanHeader(String headerName, String value, boolean defaultValue) {
+                if (value == null || value.trim().isEmpty()) {
+                        return defaultValue;
+                }
+
+                String normalizedValue = value.trim().toLowerCase(java.util.Locale.ROOT);
+                return switch (normalizedValue) {
+                        case "true", "on", "yes", "1" -> true;
+                        case "false", "off", "no", "0" -> false;
+                        default -> {
+                                LOG.debug("Ignoring invalid optional boolean header {}='{}'; using default {}",
+                                                headerName, value, defaultValue);
+                                yield defaultValue;
+                        }
+                };
         }
 
          private OffsetDateTime parseFlexibleDate(String input, boolean isStart) {
@@ -382,6 +490,15 @@ public class FhirController {
                 cookie.setMaxAge(0); // Make it expire immediately
                 cookie.setPath("/"); // Set the same path as the original cookie
                 response.addCookie(cookie); // Add it to the response to delete
+        }
+
+        private String firstNonBlank(String... values) {
+                for (String value : values) {
+                        if (value != null && !value.trim().isEmpty()) {
+                                return value.trim();
+                        }
+                }
+                return null;
         }
 
 }

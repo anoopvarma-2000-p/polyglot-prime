@@ -1,0 +1,149 @@
+package org.techbd.service.http;
+
+import java.io.IOException;
+import java.util.Optional;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.lang.NonNull;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
+import org.springframework.security.oauth2.core.user.OAuth2User;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+import org.techbd.component.SessionRegistry;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
+
+@Component
+@ConditionalOnProperty(name = "AUTH_PROVIDER", havingValue = "fusionauth", matchIfMissing = true)
+public class FusionAuthUserAuthorizationFilter extends OncePerRequestFilter {
+
+    private static final Logger LOG = LoggerFactory.getLogger(FusionAuthUserAuthorizationFilter.class);
+
+    private static final String AUTH_USER_SESSION_ATTR_NAME = "authenticatedUser";
+    private static final String SUPPORT_EMAIL = "help@techbd.org";
+    private static final String SUPPORT_EMAIL_DISPLAY = "Tech by Design Support <" + SUPPORT_EMAIL + ">";
+
+    private final FusionAuthUsersService fusionAuthUsersService;
+
+    @Autowired
+    private SessionRegistry sessionRegistry;
+
+    public FusionAuthUserAuthorizationFilter(final FusionAuthUsersService fusionAuthUsersService) {
+        this.fusionAuthUsersService = fusionAuthUsersService;
+    }
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record AuthenticatedUser(OAuth2User principal, FusionAuthUsersService.AuthorizedUser faUser)
+            implements java.io.Serializable {
+    }
+
+    public static Optional<AuthenticatedUser> getAuthenticatedUser(@NonNull HttpServletRequest request) {
+        return Optional.ofNullable(request.getSession(false))
+                .map(session -> (AuthenticatedUser) session.getAttribute(AUTH_USER_SESSION_ATTR_NAME));
+    }
+
+    public static void setAuthenticatedUser(@NonNull HttpServletRequest request,
+                                            @NonNull AuthenticatedUser authUser) {
+        request.getSession(true).setAttribute(AUTH_USER_SESSION_ATTR_NAME, authUser);
+    }
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain)
+            throws ServletException, IOException {
+
+            var authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication instanceof OAuth2AuthenticationToken oAuth2Token
+                    && authentication.isAuthenticated()
+                    && "fusionauth".equalsIgnoreCase(oAuth2Token.getAuthorizedClientRegistrationId())) {
+
+                DefaultOAuth2User oAuth2User = (DefaultOAuth2User) oAuth2Token.getPrincipal();
+                boolean alreadyEnriched = oAuth2User.getAttributes().containsKey("authProvider");
+
+                if (!alreadyEnriched) {
+                    try {
+                        LOG.info("Enriching FusionAuth user (first time or missing attributes)");
+
+                        FusionAuthUsersService.AuthorizedUser faUser =
+                                fusionAuthUsersService.extractFusionAuthUser(oAuth2User);
+
+                        DefaultOAuth2User enrichedOAuth2User =
+                                fusionAuthUsersService.handleFusionAuthLogin(request, oAuth2Token, oAuth2User, faUser);
+
+                        setAuthenticatedUser(request, new AuthenticatedUser(enrichedOAuth2User, faUser));
+                    //     if (!faUser.roles().isEmpty()) {
+                    //      String role = faUser.roles().get(0); // take first role
+                    //      Map<String, Set<String>> permissions = fusionAuthUsersService.getRolePermissions(role);
+                    //      request.getSession().setAttribute("rolePermissions", permissions);
+                    //      request.getSession().setAttribute("userRole", role);
+                    //      request.getSession().setAttribute("isSuperRole", faUser.isSuperRole());
+                    //      LOG.info("Role permissions cached in session for role {}: {}", role, permissions);
+                    //    }
+                        // fusionAuthUsersService.convertToJson(enrichedOAuth2User);
+                                           
+                    String userId = (faUser != null) ? faUser.fusionAuthId() : null;
+
+                    if (userId == null || userId.isBlank()) {
+                        LOG.warn("Skipping session registration: userId is null or empty");
+                    } else {
+                        HttpSession session = request.getSession(false);
+
+                        if (session == null) {
+                            session = request.getSession(true); // create only if needed
+                            LOG.debug("New session created for userId: {}", userId);
+                        }
+
+                        session.setAttribute("USER_ID", userId);
+
+                        // Avoid duplicate registration
+                        Object existingUser = session.getAttribute("USER_ID_REGISTERED");
+                        if (existingUser == null) {
+                            sessionRegistry.addSession(userId, session);
+                            session.setAttribute("USER_ID_REGISTERED", true);
+                            LOG.debug("Session registered for userId: {}", userId);
+                        }
+                    }
+                    LOG.info("FusionAuth user enriched. userId={}, email={}",
+                            faUser != null ? faUser.fusionAuthId() : "NULL",
+                            faUser != null ? faUser.email() : "NULL");
+                } catch (Exception e) {
+                    LOG.error("Error processing FusionAuth user login", e);
+                    response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Internal auth error");
+                    return;
+                }
+            } else {
+                LOG.debug("User already enriched, skipping enrichment");
+            }
+        }
+
+        // Actuator access check
+        if (request.getRequestURI().startsWith("/actuator")) {
+            Optional<AuthenticatedUser> userOptional = getAuthenticatedUser(request);
+            if (userOptional.isPresent()) {
+                FusionAuthUsersService.AuthorizedUser faUser = userOptional.get().faUser();
+                if (!faUser.roles().contains("ADMIN")) { // simple role check
+                    response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                    response.setContentType("text/plain");
+                    response.getWriter().write("User " + faUser.fusionAuthId()
+                            + " does not have roles to access actuator. Please contact "
+                            + SUPPORT_EMAIL_DISPLAY);
+                    response.flushBuffer();
+                    return;
+                }
+            }
+        }
+
+        filterChain.doFilter(request, response);
+    }
+}

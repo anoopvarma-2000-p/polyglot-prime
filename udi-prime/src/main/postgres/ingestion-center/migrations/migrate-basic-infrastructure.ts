@@ -84,6 +84,7 @@ const interactionHttpRequestSat = interactionHub.satelliteTable(
     request_source: textNullable(),
     techbd_version_number: textNullable(),
     tenant_id: textNullable(),
+    tenant_name: textNullable(),
     ...dvts.housekeeping.columns,
   },
 );
@@ -136,6 +137,7 @@ const interactionFhirRequestSat = interactionHub.satelliteTable(
     bundle_type: textNullable(),
     replay_status: textNullable(), //True/False/Null
     replay_on: dateTimeNullable(),
+    tenant_name: textNullable(),
     ...dvts.housekeeping.columns,
   },
 );
@@ -161,10 +163,36 @@ const interactionUserRequestSat = interactionHub.satelliteTable(
     user_session_hash: textNullable(),
     techbd_version_number: textNullable(),
     ig_version: textNullable(),
+    tenant_name: textNullable(),
     ...dvts.housekeeping.columns,
   },
 );
 
+const interactionUIUserSat = interactionHub.satelliteTable(
+  "ui_user",
+  {
+    sat_interaction_ui_user_id: primaryKey(),
+    hub_interaction_id: interactionHub.references
+      .hub_interaction_id(),
+    uri: textNullable(),
+    nature: textNullable(),
+    tenant_id: textNullable(),
+    user_id: textNullable(),
+    user_name: textNullable(),
+    user_session: textNullable(),
+    user_role: textNullable(),
+    client_ip_address: textNullable(),
+    user_agent: textNullable(),
+    interaction_start_time: dateTimeNullable(),
+    interaction_end_time: dateTimeNullable(),
+    elaboration: jsonbNullable(),
+    user_session_hash: textNullable(),
+    techbd_version_number: textNullable(),
+    ig_version: textNullable(),
+    tenant_name: textNullable(),
+    ...dvts.housekeeping.columns,
+  },
+);
 
 const interactionFhirSessionDiagnosticSat = interactionHub.satelliteTable(
   "fhir_session_diagnostic",
@@ -186,6 +214,7 @@ const interactionFhirSessionDiagnosticSat = interactionHub.satelliteTable(
     validation_engine: textNullable(),
     bundle_id: textNullable(),
     techbd_version_number: textNullable(),
+    tenant_name: textNullable(),
     ...dvts.housekeeping.columns,
   },
 );
@@ -210,6 +239,7 @@ const interactionFhirScreeningInfoSat = interactionHub.satelliteTable(
     areas_of_interest: textNullable(),
     elaboration: jsonbNullable(),
     tenant_id: textNullable(),
+    tenant_name: textNullable(),
     ...dvts.housekeeping.columns,
   },
 );
@@ -240,6 +270,7 @@ const interactionFhirScreeningPatientSat = interactionHub.satelliteTable(
     elaboration: jsonbNullable(),
     primary_org_id: textNullable(), 
     tenant_id: textNullable(),
+    tenant_name: textNullable(),
     ...dvts.housekeeping.columns,
   },
 );
@@ -262,6 +293,7 @@ const interactionFhirScreeninOrganizationSat = interactionHub.satelliteTable(
     org_postal_code: textNullable(),
     elaboration: jsonbNullable(),
     tenant_id: textNullable(),
+    tenant_name: textNullable(),
     ...dvts.housekeeping.columns,
   },
 );
@@ -283,6 +315,7 @@ const interactionFhirValidationIssueSat = interactionHub.satelliteTable(
     techbd_version_number: textNullable(),
     tenant_id: textNullable(),
     profile_url_domain: textNullable(),
+    tenant_name: textNullable(),
     ...dvts.housekeeping.columns,
   },
 );
@@ -317,6 +350,7 @@ const interactionCsvRequestSat = interactionHub.satelliteTable(
     screening_profile_data_file_name: textNullable(),
     zip_file_hub_interaction_id: textNullable(),
     techbd_version_number: textNullable(),
+    tenant_name: textNullable(),
     ...dvts.housekeeping.columns,
   },
 );
@@ -347,6 +381,7 @@ const interactionZipRequestSat = interactionHub.satelliteTable(
     number_of_fhir_bundles_generated_from_zip_file: integer().default(0),
     data_validation_status: textNullable(),
     ig_version: textNullable(),
+    tenant_name: textNullable(),
     ...dvts.housekeeping.columns,
   },
 );
@@ -371,6 +406,7 @@ const interactionfileExchangeSat = interactionHub.satelliteTable(
     protocol: fileExchangeProtocol.references.code(),
     elaboration: jsonbNullable(),
     tenant_id: textNullable(),
+    tenant_name: textNullable(),
     ...dvts.housekeeping.columns,
   },
 );
@@ -390,6 +426,7 @@ const expectationHttpRequestSat = hubExpectation.satelliteTable(
     content_type: textNullable(), // eg: Permission Denied to the file
     payload: jsonB,
     tenant_id: textNullable(),
+    tenant_name: textNullable(),
     ...dvts.housekeeping.columns,
   },
 );
@@ -414,6 +451,7 @@ const diagnosticsSat = hubDiagnostics.satelliteTable(
     elaboration: jsonbNullable(),
     tenant_id: textNullable(),
     hub_interaction_id: textNullable(),
+    tenant_name: textNullable(),
     ...dvts.housekeeping.columns,
   },
 );
@@ -433,6 +471,7 @@ const exceptionDiagnosticSat = hubDiagnostics.satelliteTable(
     elaboration: jsonbNullable(),
     tenant_id: textNullable(),
     hub_interaction_id: textNullable(),
+    tenant_name: textNullable(),
     ...dvts.housekeeping.columns,
   },
 );
@@ -460,6 +499,7 @@ const diagnosticDataledgerSat = hubDiagnostics.satelliteTable(
 	source: textNullable(),
 	additional_details: jsonbNullable(),
   tenant_id: textNullable(),
+  tenant_name: textNullable(),
   	...dvts.housekeeping.columns,
 },
 );
@@ -521,6 +561,7 @@ const interactionHl7RequestSat = interactionHub.satelliteTable(
     techbd_version_number: textNullable(),
     file_name: textNullable(),
     ig_version: textNullable(),
+    tenant_name: textNullable(),
     ...dvts.housekeeping.columns,
   },
 );
@@ -549,6 +590,7 @@ const interactionCcdaRequestSat = interactionHub.satelliteTable(
     file_name: textNullable(),
     ig_version: textNullable(),
     ccda_authoring_device: textNullable(),
+    tenant_name: textNullable(),
     ...dvts.housekeeping.columns,
   },
 );
@@ -567,7 +609,7 @@ const refCodeLookUp = SQLa.tableDefinition("ref_code_lookup", {
   sqlNS: ingressSchema
 });
 
-const nexusInteractionHub = dvts.hubTable("nexus_interaction", {
+/*const nexusInteractionHub = dvts.hubTable("nexus_interaction", {
   hub_nexus_interaction_id: primaryKey(),
   key: textNullable(),
   ...dvts.housekeeping.columns,
@@ -605,7 +647,7 @@ const linkNexusInteraction = SQLa.tableDefinition("link_nexus_interaction", {
   }, {
     isIdempotent: true,
     sqlNS: ingressSchema
-});
+});*/
 
 const ccdaReplayDetails = SQLa.tableDefinition("ccda_replay_details", {
   bundle_id: text(),
@@ -646,6 +688,7 @@ const csvFhirProcessingErrors = SQLa.tableDefinition("sat_csv_fhir_processing_er
   origin: textNullable(),
   user_agent: textNullable(),
   techbd_version_number: textNullable(),
+  tenant_name: textNullable(),
   ...dvts.housekeeping.columns
 }, {
   isIdempotent: true,
@@ -667,6 +710,7 @@ const ccdaValidationErrorsSat = interactionHub.satelliteTable(
     user_agent: textNullable(),
     techbd_version_number: textNullable(),
     ig_version: textNullable(),
+    tenant_name: textNullable(),
     ...dvts.housekeeping.columns,
   },
 );
@@ -687,6 +731,7 @@ const hl7ValidationErrorsSat = interactionHub.satelliteTable(
     user_agent: textNullable(),
     techbd_version_number: textNullable(),
     ig_version: textNullable(),
+    tenant_name: textNullable(),
     ...dvts.housekeeping.columns,
   },
 );
@@ -697,6 +742,7 @@ const users = SQLa.tableDefinition("users", {
     name:text(),
     tenant_id:textNullable(),
     role:textNullable(),
+    tenant_name: textNullable(),
     ...dvts.housekeeping.columns
   }, {
     isIdempotent: true,
@@ -723,6 +769,41 @@ const fhirReplayDetails = SQLa.tableDefinition("fhir_replay_details", {
   sqlNS: ingressSchema
 });
 
+// For Tenant Master Implementation
+const tenant = SQLa.tableDefinition("tenants", {
+    tenant_id:text(),
+    tenant_name:text(),
+    tenant_displayname:textNullable(),
+    is_active:boolean().default(true),
+    ...dvts.housekeeping.columns
+  }, {
+  isIdempotent: true,
+  sqlNS: ingressSchema,
+    constraints: (props, tableName) => {
+    const c = SQLa.tableConstraints(tableName, props);
+    return [
+      c.unique("tenant_name"),
+    ];
+  },
+});
+
+// User Sessions Table
+const userSessions = SQLa.tableDefinition("user_sessions", {
+    session_id: primaryKey(),
+    user_id: text(),
+    username: text(),
+    session_start_time: dateTime(),
+    session_end_time: dateTimeNullable(),
+    session_expiry_time: dateTime(),
+    source: textNullable(), // IDP Provider (GIT or FusionAuth)
+    updated_at: dateTimeNullable(),
+    updated_by: textNullable(),
+    ...dvts.housekeeping.columns,
+}, {
+    isIdempotent: true,
+    sqlNS: ingressSchema
+});
+
 // Function to read SQL from a list of .psql files
 async function readSQLFiles(filePaths: readonly string[]): Promise<string[]> {
   const sqlContents = [];
@@ -742,6 +823,9 @@ async function readSQLFiles(filePaths: readonly string[]): Promise<string[]> {
 // List of dependencies and test dependencies
 const dependencies = [
   //"../migrate_missing_columns_with_lock.psql",
+  "../tm_step_1_rename_tenant_id_column.psql",
+  "../tm_step_2_add_new_tenant_id_column.psql",
+  "../tm_step_3_set_default_for_new_tenant_id_column.psql",
   "../000_idempotent_universal.psql",
   "../001_idempotent_interaction.psql",
   "../002_idempotent_diagnostics.psql",
@@ -835,6 +919,9 @@ const migrateSP = pgSQLa.storedProcedure(
 
       CREATE EXTENSION IF NOT EXISTS "uuid-ossp" SCHEMA ${ingressSchema.sqlNamespace};
 
+      CREATE EXTENSION IF NOT EXISTS "pg_trgm" SCHEMA ${ingressSchema.sqlNamespace};
+
+
       ${assuranceSchema}
 
 
@@ -896,6 +983,42 @@ const migrateSP = pgSQLa.storedProcedure(
           ) THEN
               CREATE UNIQUE INDEX IF NOT EXISTS sat_int_fhir_req_uq_hub_int_tnt_nat 
               ON techbd_udi_ingress.sat_interaction_fhir_request (hub_interaction_id, tenant_id, nature);
+          END IF;
+
+          -- Add idx_fhir_req_cover index if not exists
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_indexes
+            WHERE schemaname = 'techbd_udi_ingress'
+            AND tablename = 'sat_interaction_fhir_request'
+            AND indexname = 'idx_fhir_req_cover'
+          ) THEN
+            CREATE INDEX idx_fhir_req_cover ON techbd_udi_ingress.sat_interaction_fhir_request USING btree (created_at DESC) WHERE (nature = 'Original FHIR Payload');
+          END IF;
+
+          -- Add idx_interaction_id_trgm_partial index if not exists
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_indexes
+            WHERE schemaname = 'techbd_udi_ingress'
+            AND tablename = 'sat_interaction_fhir_request'
+            AND indexname = 'idx_interaction_id_trgm_partial'
+          ) THEN
+            CREATE INDEX idx_interaction_id_trgm_partial
+            ON techbd_udi_ingress.sat_interaction_fhir_request
+            USING gin ((hub_interaction_id) techbd_udi_ingress.gin_trgm_ops)
+            WHERE nature = 'Original FHIR Payload';
+          END IF;
+
+          -- Add idx_bundle_id_trgm_partial index if not exists
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_indexes
+            WHERE schemaname = 'techbd_udi_ingress'
+            AND tablename = 'sat_interaction_fhir_request'
+            AND indexname = 'idx_bundle_id_trgm_partial'
+          ) THEN
+            CREATE INDEX idx_bundle_id_trgm_partial
+            ON techbd_udi_ingress.sat_interaction_fhir_request
+            USING gin ((bundle_id) techbd_udi_ingress.gin_trgm_ops)
+            WHERE nature = 'Original FHIR Payload';
           END IF;
 
           IF NOT EXISTS (
@@ -1012,6 +1135,8 @@ const migrateSP = pgSQLa.storedProcedure(
       PERFORM pg_advisory_unlock(hashtext('islm_migration_fhir_request_index_creation'));
 
       ${interactionUserRequestSat}
+
+      ${interactionUIUserSat}
 
       ${interactionFhirSessionDiagnosticSat}
       
@@ -1173,6 +1298,26 @@ const migrateSP = pgSQLa.storedProcedure(
                   ON techbd_udi_ingress.sat_interaction_user (hub_interaction_id);
           END IF;
 
+          IF NOT EXISTS (
+              SELECT 1 FROM pg_indexes
+              WHERE schemaname = 'techbd_udi_ingress'
+                AND tablename = 'sat_interaction_ui_user'
+                AND indexname = 'idx_sat_interaction_ui_user_start_time'
+          ) THEN
+              CREATE INDEX idx_sat_interaction_ui_user_start_time
+                  ON techbd_udi_ingress.sat_interaction_ui_user (interaction_start_time);
+          END IF;
+
+          IF NOT EXISTS (
+              SELECT 1 FROM pg_indexes
+              WHERE schemaname = 'techbd_udi_ingress'
+                AND tablename = 'sat_interaction_ui_user'
+                AND indexname = 'idx_sat_interaction_ui_user_hub_id'
+          ) THEN
+              CREATE INDEX idx_sat_interaction_ui_user_hub_id
+                  ON techbd_udi_ingress.sat_interaction_ui_user (hub_interaction_id);
+          END IF;
+
 
           IF NOT EXISTS (
               SELECT 1 FROM pg_indexes
@@ -1182,11 +1327,41 @@ const migrateSP = pgSQLa.storedProcedure(
           ) THEN
               CREATE INDEX idx_sat_interaction_fhir_request_start_time
                   ON techbd_udi_ingress.sat_interaction_fhir_request (interaction_start_time);
-          END IF;          
+          END IF;   
+          
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_indexes
+        WHERE schemaname = 'techbd_udi_ingress'
+          AND tablename = 'sat_interaction_fhir_request'
+          AND indexname = 'idx_sat_interaction_fhir_request_csv_only'
+    ) THEN
+
+        CREATE INDEX idx_sat_interaction_fhir_request_csv_only
+        ON techbd_udi_ingress.sat_interaction_fhir_request (
+            source_hub_interaction_id,
+            bundle_id,
+            created_at DESC
+        )
+        WHERE source_type = 'CSV';
+
+    END IF;          
 
       PERFORM pg_advisory_unlock(hashtext('islm_migration_http_request_index_creation'));
 
       ${jsonActionRule}
+
+      -- Add new column is_deleted  
+        IF NOT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'techbd_udi_ingress'
+              AND table_name = 'json_action_rule'
+              AND column_name = 'is_deleted'
+        ) THEN
+            ALTER TABLE techbd_udi_ingress.json_action_rule
+            ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE;
+        END IF; 
             
       -- Create action_check constraint
       IF NOT EXISTS (
@@ -1254,10 +1429,9 @@ const migrateSP = pgSQLa.storedProcedure(
     END IF;
     PERFORM pg_advisory_unlock(hashtext('islm_migration_lookup_index_creation'));
 
-      ${nexusInteractionHub}
-      ${nexusInteractionIngestionSat}
+
       
-    IF NOT EXISTS (
+    /*IF NOT EXISTS (
         SELECT 1
         FROM information_schema.columns
         WHERE table_schema = 'techbd_udi_ingress'
@@ -1277,7 +1451,7 @@ const migrateSP = pgSQLa.storedProcedure(
     ) THEN
         EXECUTE 'CREATE INDEX sat_inter_nexus_req_hub_nexus_inter_id_idx 
                 ON techbd_udi_ingress.sat_nexus_interaction_ingestion (hub_nexus_interaction_id)';
-    END IF;
+    END IF;*/
       ${csvFhirProcessingErrors}
       PERFORM pg_advisory_lock(hashtext('islm_migration_flat_file_index_creation'));
           IF NOT EXISTS (
@@ -1356,8 +1530,8 @@ const migrateSP = pgSQLa.storedProcedure(
       
       ${ccdaValidationErrorsSat}    
       ${hl7ValidationErrorsSat}        
-      ${linkNexusInteraction}
-      IF NOT EXISTS (
+
+      /*IF NOT EXISTS (
           SELECT 1
           FROM pg_constraint
           WHERE conname = 'link_nexus_interaction_pkey'
@@ -1365,7 +1539,7 @@ const migrateSP = pgSQLa.storedProcedure(
           ALTER TABLE techbd_udi_ingress.link_nexus_interaction
           ADD CONSTRAINT link_nexus_interaction_pkey
           PRIMARY KEY (hub_nexus_interaction_id, hub_interaction_id);
-      END IF;
+      END IF;*/
 
       ${ccdaReplayDetails}
       PERFORM pg_advisory_lock(hashtext('ccda_replay_details'));
@@ -1448,6 +1622,63 @@ const migrateSP = pgSQLa.storedProcedure(
             AND is_nullable = 'NO'
       ) THEN
           ALTER TABLE techbd_udi_ingress.sat_interaction_fhir_validation_issue ALTER COLUMN issue DROP NOT NULL;
+      END IF;
+
+      ${tenant}
+
+      ${userSessions}
+      IF NOT EXISTS (
+          SELECT 1
+          FROM information_schema.table_constraints
+          WHERE table_schema = 'techbd_udi_ingress'
+            AND table_name = 'user_sessions'
+            AND constraint_name = 'chk_session_time_valid'
+      ) THEN
+          ALTER TABLE techbd_udi_ingress.user_sessions
+          ADD CONSTRAINT chk_session_time_valid
+          CHECK (
+              session_end_time IS NULL
+              OR session_end_time >= session_start_time
+          );
+      END IF;
+
+      IF NOT EXISTS (
+          SELECT 1
+          FROM information_schema.table_constraints
+          WHERE table_schema = 'techbd_udi_ingress'
+            AND table_name = 'user_sessions'
+            AND constraint_name = 'chk_expiry_after_start'
+      ) THEN
+          ALTER TABLE techbd_udi_ingress.user_sessions
+          ADD CONSTRAINT chk_expiry_after_start
+          CHECK (
+              session_expiry_time >= session_start_time
+          );
+      END IF;
+
+      -- Index for active user sessions
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_indexes
+        WHERE schemaname = 'techbd_udi_ingress'
+          AND tablename = 'user_sessions'
+          AND indexname = 'idx_active_user_session'
+      ) THEN
+        CREATE INDEX IF NOT EXISTS idx_active_user_session
+        ON techbd_udi_ingress.user_sessions(user_id)
+        WHERE session_end_time IS NULL;
+      END IF;
+
+      -- Index for session expiry lookup
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_indexes
+        WHERE schemaname = 'techbd_udi_ingress'
+          AND tablename = 'user_sessions'
+          AND indexname = 'idx_user_sessions_expiry'
+      ) THEN
+        CREATE INDEX IF NOT EXISTS idx_user_sessions_expiry
+        ON techbd_udi_ingress.user_sessions(session_expiry_time);
       END IF;
 
       ${dependenciesSQL}

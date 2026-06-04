@@ -44,7 +44,7 @@ public class FHIRUtil {
 
     public static String getProfileUrl(String key) {
         if (BASE_FHIR_URL == null) {
-            throw new IllegalStateException("FHIRUtil has not been initialized. Call initialize() first.");
+            throw new IllegalStateException("BASE_FHIR_URL cannot be null");
         }
         return BASE_FHIR_URL + PROFILE_MAP.getOrDefault(key, "");
     }
@@ -156,12 +156,13 @@ public class FHIRUtil {
     
    
     public static Map<String, Object> buildHeaderParametersMap(String tenantId, String customDataLakeApi,
-            String dataLakeApiContentType, String requestUriToBeOverridden,
+          //  String dataLakeApiContentType,
+           String requestUriToBeOverridden,
             String validationSeverityLevel, String healthCheck, String correlationId, String provenance, String requestedIgVersion   ) {
         Map<String, Object> headers = new HashMap<>();
         headers.put(Constants.TENANT_ID, tenantId);
         addIfNotEmpty(headers, Constants.CUSTOM_DATA_LAKE_API, customDataLakeApi);
-        addIfNotEmpty(headers, Constants.DATA_LAKE_API_CONTENT_TYPE, dataLakeApiContentType);
+        // addIfNotEmpty(headers, Constants.DATA_LAKE_API_CONTENT_TYPE, dataLakeApiContentType);
         addIfNotEmpty(headers, Constants.OVERRIDE_REQUEST_URI, requestUriToBeOverridden);
         addIfNotEmpty(headers, Constants.VALIDATION_SEVERITY_LEVEL, validationSeverityLevel);
         addIfNotEmpty(headers, Constants.HEALTH_CHECK, healthCheck);

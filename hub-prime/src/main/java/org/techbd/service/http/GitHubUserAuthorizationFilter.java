@@ -2,9 +2,12 @@ package org.techbd.service.http;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 import org.jetbrains.annotations.NotNull;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.lang.NonNull;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
@@ -20,6 +23,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 @Component
+@ConditionalOnProperty(name = "AUTH_PROVIDER", havingValue = "github")
 public class GitHubUserAuthorizationFilter extends OncePerRequestFilter {
 
     private static final String AUTH_USER_SESSION_ATTR_NAME = "authenticatedUser";
@@ -88,23 +92,34 @@ public class GitHubUserAuthorizationFilter extends OncePerRequestFilter {
                             + supportEmailDisplayName + "\">" + supportEmail + "</a>>.");
                     return;
                 }
-                setAuthenticatedUser(request, new AuthenticatedUser(gitHubPrincipal, gitHubAuthnUser.orElseThrow()));
+                Map<String, Object> attributes = new HashMap<>(gitHubPrincipal.getAttributes());
+                    // Add auth provider
+                    attributes.put("authProvider", "github");
+                    // Create updated principal
+                    DefaultOAuth2User updatedUser = new DefaultOAuth2User(
+                            gitHubPrincipal.getAuthorities(),
+                            attributes,
+                            "login" // GitHub username field
+                    );
+                setAuthenticatedUser(request, new AuthenticatedUser(updatedUser, gitHubAuthnUser.orElseThrow()));
             }
         }
 
         if (request.getRequestURI().startsWith("/actuator")) {
-            Optional<AuthenticatedUser> userOptional = getAuthenticatedUser(request);
-            if (userOptional.isPresent()) {
-                if (!userOptional.get().ghUser.isUserHasActuatorAccess()) {
-                    response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                    response.setContentType("text/plain"); // Ensure content type is set to text/plain
-                    response.getWriter().write("GitHub ID " + userOptional.get().ghUser.gitHubId()
-                            + " does not have roles to access actuator. Please send an email to "
-                            + supportEmailDisplayName
-                            + " from your manager, to add roles to access actuator from this GitHub ID.");
-                    response.flushBuffer();
-                    return; // Stop further processing of the request
-                }
+            final var userOptional = getAuthenticatedUser(request);
+            final boolean hasAccess = userOptional.map(u -> u.ghUser().isUserHasActuatorAccess()).orElse(false);
+
+            if (!hasAccess) {
+                final String message = userOptional
+                        .map(u -> "GitHub ID " + u.ghUser().gitHubId()
+                                 + " does not have roles to access actuator. Please contact " + supportEmailDisplayName)
+                        .orElse("Authentication required to access actuator endpoints. Please log in.");
+
+                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                response.setContentType("text/plain");
+                response.getWriter().write(message);
+                response.flushBuffer();
+                return; // Stop further processing of the request
             }
         }
 

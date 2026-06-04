@@ -27,6 +27,7 @@ import org.techbd.ingest.service.portconfig.PortResolverService;
 import org.techbd.ingest.util.AppLogger;
 import org.techbd.ingest.util.LogUtil;
 import org.techbd.ingest.util.TemplateLogger;
+import org.techbd.ingest.util.UuidUtil;
 
 import ca.uhn.hl7v2.DefaultHapiContext;
 import ca.uhn.hl7v2.HL7Exception;
@@ -124,6 +125,7 @@ public class NettyTcpServer implements MessageSourceProvider {
     // Persists the formatted HAProxy header string for the lifetime of the channel so it
     // can be re-logged on every message, idle event, and timeout — not just on first receipt.
     private static final AttributeKey<String> HAPROXY_DETAILS_KEY = AttributeKey.valueOf("HAPROXY_DETAILS");
+    private static final AttributeKey<PortConfig.PortEntry> PORT_ENTRY_KEY = AttributeKey.valueOf("PORT_ENTRY");
 
     /**
      * SESSION_ID_KEY — assigned once when the TCP connection is established
@@ -218,6 +220,14 @@ public class NettyTcpServer implements MessageSourceProvider {
         return parseHaproxyField(haproxyDetails(ctx), "destPort");
     }
 
+    /**
+     * Returns the cached PortConfig.PortEntry for this channel wrapped in an Optional,
+     * or Optional.empty() if PORT_ENTRY_KEY has not been set yet.
+     */
+    private Optional<PortConfig.PortEntry> cachedPortEntry(ChannelHandlerContext ctx) {
+        return Optional.ofNullable(ctx.channel().attr(PORT_ENTRY_KEY).get());
+    }
+
     @PostConstruct
     public void startServer() {
         // Parse TCP delimiters from hex strings
@@ -238,7 +248,7 @@ public class NettyTcpServer implements MessageSourceProvider {
                                 // SESSION initialisation — done ONCE per TCP connection.
                                 // The sessionId never changes for the lifetime of this channel.
                                 // -----------------------------------------------------------------
-                                String sessionId = UUID.randomUUID().toString();
+                                String sessionId = UuidUtil.generateUuid();
                                 long sessionStartTime = System.currentTimeMillis();
 
                                 ch.attr(SESSION_ID_KEY).set(sessionId);
@@ -266,14 +276,17 @@ public class NettyTcpServer implements MessageSourceProvider {
                                 ch.attr(NO_DELIMITER_DETECTED_KEY).set(false);
                                 ch.attr(RAW_ACCUMULATOR_KEY).set(new StringBuilder());
                                 ch.attr(HAPROXY_DETAILS_KEY).set(null);
+                                ch.attr(PORT_ENTRY_KEY).set(null);
 
                                 // Always start with ReadTimeoutHandler; handleProxyHeader /
                                 // handleSandboxProxy will replace it with IdleStateHandler if
                                 // the resolved PortEntry has a keepAliveTimeout configured.
                                 ch.pipeline().addLast("defaultReadTimeout",
                                         new ReadTimeoutHandler(readTimeoutSeconds, TimeUnit.SECONDS));
-
-                                String activeProfile = System.getenv("SPRING_PROFILES_ACTIVE");
+                                String activeProfile = System.getProperty("SPRING_PROFILES_ACTIVE");
+                                if (null == activeProfile) {
+                                    activeProfile = System.getenv("SPRING_PROFILES_ACTIVE");
+                                }
 
                                 // HAProxy protocol support
                                 if (!"sandbox".equals(activeProfile)) {
@@ -300,11 +313,15 @@ public class NettyTcpServer implements MessageSourceProvider {
                                         String sessionId = ctx.channel().attr(SESSION_ID_KEY).get();
                                         UUID interactionId = ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).get();
                                         if (interactionId == null) {
-                                            interactionId = UUID.randomUUID();
+                                            interactionId = UUID.fromString(UuidUtil.generateUuid());
                                             ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).set(interactionId);
                                         }
 
-                                        String activeProfile = System.getenv("SPRING_PROFILES_ACTIVE");
+                                        String activeProfile = System.getProperty("SPRING_PROFILES_ACTIVE");
+                                        if (null == activeProfile) {
+                                            activeProfile = System.getenv("SPRING_PROFILES_ACTIVE");
+                                        }
+
                                         if ("sandbox".equals(activeProfile)) {
                                             handleSandboxProxy(ctx, sessionId, interactionId);
                                         } else {
@@ -360,7 +377,7 @@ public class NettyTcpServer implements MessageSourceProvider {
                                         String sessionId = ctx.channel().attr(SESSION_ID_KEY).get();
                                         UUID interactionId = ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).get();
                                         if (interactionId == null) {
-                                            interactionId = UUID.randomUUID();
+                                            interactionId = UUID.fromString(UuidUtil.generateUuid());
                                             ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).set(interactionId);
                                         }
                                         
@@ -406,12 +423,16 @@ public class NettyTcpServer implements MessageSourceProvider {
                                                 String sanitizedError = errorMsg.replace("|", " ").replace("\r", " ").replace("\n", " ");
                                                 
                                                 String genericNack = "MSH|^~\\&|SERVER|LOCAL|CLIENT|REMOTE|" + Instant.now() + "||ACK|" +
-                                                        UUID.randomUUID().toString().substring(0, 20) + "|P|2.5\r" +
+                                                        UuidUtil.generateUuid().substring(0, 20) + "|P|2.5\r" +
                                                         "MSA|AR|UNKNOWN|Channel exception: " + sanitizedError + "\r" +
-                                                        "ERR|||207^Application internal error^HL70357||E|||Channel exception occurred\r" +
-                                                        "NTE|1||InteractionID: " + interactionId + " | TechBDIngestionApiVersion: " + 
-                                                        appConfig.getVersion() + " | ErrorTraceID: " + errorTraceId + "\r";
-                                                
+                                                        "ERR|||207^Application internal error^HL70357||E|||Channel exception occurred\r";
+
+                                                if (FeatureEnum.isEnabled(FeatureEnum.ADD_NTE_SEGMENT_TO_HL7_ACK)) {
+                                                    genericNack += "NTE|1||InteractionID: " + interactionId +
+                                                            " | TechBDIngestionApiVersion: " + appConfig.getVersion() +
+                                                            " | ErrorTraceID: " + errorTraceId + "\r";
+                                                }
+                                   
                                                 String wrappedNack = String.valueOf((char)MLLP_START) + genericNack + (char)MLLP_END_1 + (char)MLLP_END_2;
                                                 
                                                 ByteBuf responseBuf = ctx.alloc().buffer();
@@ -490,7 +511,7 @@ public class NettyTcpServer implements MessageSourceProvider {
                                             String sessionId = ctx.channel().attr(SESSION_ID_KEY).get();
                                             UUID interactionId = ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).get();
                                             if (interactionId == null) {
-                                                interactionId = UUID.randomUUID();
+                                                interactionId = UUID.fromString(UuidUtil.generateUuid());
                                                 ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).set(interactionId);
                                             }
 
@@ -541,14 +562,18 @@ public class NettyTcpServer implements MessageSourceProvider {
                                                         String timeoutError = String.format(
                                                                 "Read idle timeout: No data received within %d seconds", effectiveTimeout);
 
-                                                        String timeoutNack = "MSH|^~\\&|SERVER|LOCAL|CLIENT|REMOTE|"
-                                                                + Instant.now() + "||ACK|" +
-                                                                UUID.randomUUID().toString().substring(0, 20) + "|P|2.5\r" +
-                                                                "MSA|AR|UNKNOWN|" + timeoutError + "\r" +
-                                                                "ERR|||207^Application internal error^HL70357||E|||Idle timeout occurred\r" +
-                                                                "NTE|1||InteractionID: " + interactionId +
-                                                                " | TechBDIngestionApiVersion: " + appConfig.getVersion() +
-                                                                " | ErrorTraceID: " + errorTraceId + "\r";
+                                                    String timeoutNack = "MSH|^~\\&|SERVER|LOCAL|CLIENT|REMOTE|"
+                                                            + Instant.now() + "||ACK|" +
+                                                            UuidUtil.generateUuid().substring(0, 20) + "|P|2.5\r" +
+                                                            "MSA|AR|UNKNOWN|" + timeoutError + "\r" +
+                                                          "ERR|||207^Application internal error^HL70357||E|||Idle timeout occurred\r";
+                                                        if (FeatureEnum
+                                                                .isEnabled(FeatureEnum.ADD_NTE_SEGMENT_TO_HL7_ACK)) {
+                                                            timeoutNack += "NTE|1||InteractionID: " + interactionId +
+                                                                    " | TechBDIngestionApiVersion: "
+                                                                    + appConfig.getVersion() +
+                                                                    " | ErrorTraceID: " + errorTraceId + "\r";
+                                                           }
 
                                                         String wrappedNack = String.valueOf((char) MLLP_START) + timeoutNack
                                                                 + (char) MLLP_END_1 + (char) MLLP_END_2;
@@ -606,7 +631,7 @@ public class NettyTcpServer implements MessageSourceProvider {
                                             String sessionId = ctx.channel().attr(SESSION_ID_KEY).get();
                                             UUID interactionId = ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).get();
                                             if (interactionId == null) {
-                                                interactionId = UUID.randomUUID();
+                                                interactionId = UUID.fromString(UuidUtil.generateUuid());
                                                 ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).set(interactionId);
                                             }
 
@@ -655,16 +680,21 @@ public class NettyTcpServer implements MessageSourceProvider {
                                                                 "Read timeout: No complete message received within %d seconds",
                                                                 readTimeoutSeconds);
 
-                                                        // Generate HL7 NACK for timeout
-                                                        String timeoutNack = "MSH|^~\\&|SERVER|LOCAL|CLIENT|REMOTE|"
-                                                                + Instant.now() + "||ACK|" +
-                                                                UUID.randomUUID().toString().substring(0, 20) + "|P|2.5\r" +
+                                                    // Generate HL7 NACK for timeout
+                                                    String timeoutNack = "MSH|^~\\&|SERVER|LOCAL|CLIENT|REMOTE|"
+                                                            + Instant.now() + "||ACK|" +
+                                                            UuidUtil.generateUuid().substring(0, 20)
+                                                                + "|P|2.5\r" +
                                                                 "MSA|AR|UNKNOWN|" + timeoutError + "\r" +
-                                                                "ERR|||207^Application internal error^HL70357||E|||Read timeout occurred\r"
-                                                                +
-                                                                "NTE|1||InteractionID: " + interactionId +
-                                                                " | TechBDIngestionApiVersion: " + appConfig.getVersion() +
-                                                                " | ErrorTraceID: " + errorTraceId + "\r";
+                                                                "ERR|||207^Application internal error^HL70357||E|||Read timeout occurred\r";
+
+                                                        if (FeatureEnum
+                                                                .isEnabled(FeatureEnum.ADD_NTE_SEGMENT_TO_HL7_ACK)) {
+                                                            timeoutNack += "NTE|1||InteractionID: " + interactionId +
+                                                                    " | TechBDIngestionApiVersion: "
+                                                                    + appConfig.getVersion() +
+                                                                    " | ErrorTraceID: " + errorTraceId + "\r";
+                                                        }
 
                                                         String wrappedNack = String.valueOf((char) MLLP_START) + timeoutNack
                                                                 + (char) MLLP_END_1 + (char) MLLP_END_2;
@@ -838,7 +868,7 @@ public class NettyTcpServer implements MessageSourceProvider {
                     minimalHeaders,
                     "",
                     appConfig.getAws().getSqs().getFifoQueueUrl(),
-                    UUID.randomUUID().toString(),
+                    UuidUtil.generateUuid(),
                     now, timestamp,
                     "tcp-message", 0,
                     "", "", "", "", "",
@@ -936,7 +966,7 @@ public class NettyTcpServer implements MessageSourceProvider {
             String sessionId = ctx.channel().attr(SESSION_ID_KEY).get();
             UUID interactionId = ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).get();
             if (interactionId == null) {
-                interactionId = UUID.randomUUID();
+                interactionId = UUID.fromString(UuidUtil.generateUuid());
                 ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).set(interactionId);
             }
 
@@ -983,7 +1013,7 @@ public class NettyTcpServer implements MessageSourceProvider {
                         logger.warn("MLLP_MESSAGE_SIZE_LIMIT_EXCEEDED [sessionId={}] [interactionId={}] [haproxyDetails={}] size={} bytes exceeds max={} bytes",
                                 sessionId, interactionId, haproxyDetails(ctx), in.readableBytes(), maxFrameLength);
                         ctx.channel().attr(MESSAGE_SIZE_EXCEEDED_KEY).set(true);
-                        endIndex = startIndex + 1;
+                        endIndex = in.writerIndex();
                     } else {
                         return;
                     }
@@ -1020,7 +1050,7 @@ public class NettyTcpServer implements MessageSourceProvider {
                         logger.warn("TCP_DELIMITED_MESSAGE_SIZE_LIMIT_EXCEEDED [sessionId={}] [interactionId={}] [haproxyDetails={}] size={} bytes exceeds max={} bytes",
                                 sessionId, interactionId, haproxyDetails(ctx), in.readableBytes(), maxFrameLength);
                         ctx.channel().attr(MESSAGE_SIZE_EXCEEDED_KEY).set(true);
-                        endIndex = startIndex + 1;
+                        endIndex = in.writerIndex();
                     } else {
                         return;
                     }
@@ -1109,6 +1139,7 @@ public class NettyTcpServer implements MessageSourceProvider {
         ctx.channel().attr(NO_DELIMITER_DETECTED_KEY).set(null);
         ctx.channel().attr(RAW_ACCUMULATOR_KEY).set(null);
         ctx.channel().attr(HAPROXY_DETAILS_KEY).set(null);
+        ctx.channel().attr(PORT_ENTRY_KEY).set(null);
         // SESSION_ID_KEY, SESSION_START_TIME_KEY, SESSION_MESSAGE_COUNT_KEY
         // are deliberately left intact — cleared only in channelInactive.
     }
@@ -1239,7 +1270,7 @@ public class NettyTcpServer implements MessageSourceProvider {
      * Main message handler — routes to HL7 or generic handler based on MLLP detection.
      * Also installs IdleStateHandler in place of the default ReadTimeoutHandler when
      * the resolved PortEntry carries a keepAliveTimeout value.
-     */
+    */
     private void handleMessage(ChannelHandlerContext ctx, String rawMessage,
             String sessionId, UUID interactionId) {
         // All IP/port values come exclusively from HAPROXY_DETAILS_KEY.
@@ -1250,41 +1281,53 @@ public class NettyTcpServer implements MessageSourceProvider {
         String destinationIP  = haproxyDestAddress(ctx);
         String destinationPort = haproxyDestPort(ctx);
 
+       RequestContext portResolutionCtx = buildRequestContext(
+                rawMessage.trim(),
+                interactionId.toString(),
+                Optional.empty(),
+                clientPort,
+                clientIP,
+                destinationIP,
+                destinationPort,
+                MessageSourceType.TCP);
+
+        Optional<PortConfig.PortEntry> portEntryOpt = portResolverService.resolve(portResolutionCtx, Constants.TCP);
+        ctx.channel().attr(PORT_ENTRY_KEY).set(portEntryOpt.orElse(null));
+
         // Check if message size exceeded limit
         Boolean messageSizeExceeded = ctx.channel().attr(MESSAGE_SIZE_EXCEEDED_KEY).get();
         if (messageSizeExceeded != null && messageSizeExceeded) {
             String errorTraceId = ErrorTraceIdGenerator.generateErrorTraceId();
-            String errorMessage = String.format("Message size %d bytes exceeds maximum allowed size of %d bytes", 
+            String errorMessage = String.format("Message size %d bytes exceeds maximum allowed size of %d bytes",
                     rawMessage.length(), maxMessageSizeBytes);
-            
+
             logger.error("MESSAGE_SIZE_LIMIT_EXCEEDED [sessionId={}] [interactionId={}] [haproxyDetails={}] [errorTraceId={}] size={} bytes, max={} bytes",
                     sessionId, interactionId, haproxyDetails(ctx), errorTraceId, rawMessage.length(), maxMessageSizeBytes);
-            
+
             LogUtil.logDetailedError(
-                413, 
-                errorMessage, 
-                interactionId.toString(), 
+                413,
+                errorMessage,
+                interactionId.toString(),
                 errorTraceId,
                 new IllegalArgumentException("Message size limit exceeded")
             );
-            
-            boolean isMllpWrapped = detectMllpWrapper(rawMessage);
-            boolean isTcpDelimited = detectTcpDelimiterWrapper(rawMessage);
-            
+
+           boolean isMllpPort = detectMllp(portEntryOpt);
+
             RequestContext requestContext = buildRequestContext(
                     rawMessage.trim(),
                     interactionId.toString(),
-                    Optional.empty(),
+                    portEntryOpt,
                     clientPort,
                     clientIP,
                     destinationIP,
                     destinationPort,
-                    isMllpWrapped ? MessageSourceType.MLLP : MessageSourceType.TCP);
-            
+                    isMllpPort ? MessageSourceType.MLLP : MessageSourceType.TCP);
+
             requestContext.setIngestionFailed(true);
-            
+
             String nackMessage;
-            if (isMllpWrapped) {
+            if (isMllpPort) {
                 nackMessage = createHL7AckFromMsh(
                         rawMessage, "AR", errorMessage, interactionId.toString(), errorTraceId);
                 sendResponseAndClose(ctx, wrapMllp(nackMessage), sessionId, interactionId, "HL7_NACK_SIZE_EXCEEDED");
@@ -1301,18 +1344,6 @@ public class NettyTcpServer implements MessageSourceProvider {
         logger.info("COMPLETE_MESSAGE_RECEIVED [sessionId={}] [interactionId={}] [haproxyDetails={}] from={}:{}, size={} bytes MLLP_WRAPPED={} TCP_DELIMITED={}",
                 sessionId, interactionId, haproxyDetails(ctx), clientIP, clientPort, rawMessage.length(),
                 isMllpWrapped ? "YES" : "NO", isTcpDelimited ? "YES" : "NO");
-
-        RequestContext initialContext = buildRequestContext(
-                rawMessage.trim(),
-                interactionId.toString(),
-                Optional.empty(),
-                clientPort,
-                clientIP,
-                destinationIP,
-                destinationPort,
-                isMllpWrapped ? MessageSourceType.MLLP : MessageSourceType.TCP);
-
-        Optional<PortConfig.PortEntry> portEntryOpt = portResolverService.resolve(initialContext ,Constants.TCP);
 
         // --- keepAliveTimeout override ---
         int resolvedKat = portEntryOpt
@@ -1488,9 +1519,9 @@ public class NettyTcpServer implements MessageSourceProvider {
                 GenericParser parser = context.getGenericParser();
                 hl7Message = parser.parse(cleanMsg);
                 Message ack = hl7Message.generateACK();
-              if (FeatureEnum.isEnabled(FeatureEnum.ADD_NTE_SEGMENT_TO_HL7_ACK)) {
+                if (FeatureEnum.isEnabled(FeatureEnum.ADD_NTE_SEGMENT_TO_HL7_ACK)) {
                    ackMessage = addNteWithInteractionId(ack, interactionId.toString(), appConfig.getVersion());
-                 }
+                }
                 ackMessage = new PipeParser().encode(ack);
                 logger.info("HL7_ACK_GENERATED [sessionId={}] [interactionId={}] [haproxyDetails={}]",
                         sessionId, interactionId, haproxyDetails(ctx));
@@ -1537,6 +1568,11 @@ public class NettyTcpServer implements MessageSourceProvider {
                     responseType = "HL7_NACK_MISSING_ZNT";
                     return;
                 }
+            } else {
+                if (hl7Message == null) {
+                     ackMessage = createHL7AckFromMsh(cleanMsg, "AA", null,
+                            interactionId.toString(), null);
+                }
             }
             messageProcessorService.processMessage(requestContext, cleanMsg, ackMessage);
             responseToSend = wrapMllp(ackMessage);
@@ -1578,12 +1614,16 @@ public class NettyTcpServer implements MessageSourceProvider {
                         sessionId, interactionId, haproxyDetails(ctx), errorTraceId);
                 
                 String genericNack = "MSH|^~\\&|SERVER|LOCAL|CLIENT|REMOTE|" + Instant.now() + "||ACK|" +
-                        UUID.randomUUID().toString().substring(0, 20) + "|P|2.5\r" +
+                        UuidUtil.generateUuid().substring(0, 20) + "|P|2.5\r" +
                         "MSA|AR|UNKNOWN|Unexpected error occurred\r" +
-                        "ERR|||207^Application internal error^HL70357||E|||Unexpected error occurred\r" +
-                        "NTE|1||InteractionID: " + interactionId + " | TechBDIngestionApiVersion: " +
-                        appConfig.getVersion() + " | ErrorTraceID: " + errorTraceId + "\r";
-                
+                        "ERR|||207^Application internal error^HL70357||E|||Unexpected error occurred\r";
+
+                if (FeatureEnum.isEnabled(FeatureEnum.ADD_NTE_SEGMENT_TO_HL7_ACK)) {
+                    genericNack += "NTE|1||InteractionID: " + interactionId +
+                            " | TechBDIngestionApiVersion: " + appConfig.getVersion() +
+                            " | ErrorTraceID: " + errorTraceId + "\r";
+                }
+            
                 sendResponseAndClose(ctx, wrapMllp(genericNack), sessionId, interactionId,
                         "HL7_NACK_UNEXPECTED_ERROR");
             }
@@ -1715,7 +1755,7 @@ public class NettyTcpServer implements MessageSourceProvider {
                     ctx.close();
                     return;
                 }
-                // Reset per-message state; session-level attributes are preserved
+                // Reset per-message state; session-level attributes are preserved.
                 ctx.channel().attr(INTERACTION_ATTRIBUTE_KEY).set(null);
                 ctx.channel().attr(MESSAGE_START_TIME_KEY).set(System.currentTimeMillis());
                 ctx.channel().attr(FRAGMENT_COUNT_KEY).set(new AtomicInteger(0));
@@ -1724,6 +1764,7 @@ public class NettyTcpServer implements MessageSourceProvider {
                 ctx.channel().attr(ERROR_NACK_SENT_KEY).set(false);
                 ctx.channel().attr(NO_DELIMITER_DETECTED_KEY).set(false);
                 ctx.channel().attr(RAW_ACCUMULATOR_KEY).set(new StringBuilder());
+                ctx.channel().attr(PORT_ENTRY_KEY).set(null);
             });
         } else {
             ctx.writeAndFlush(responseBuf).addListener(future -> {
@@ -1862,16 +1903,18 @@ public class NettyTcpServer implements MessageSourceProvider {
             StringBuilder nack = new StringBuilder();
             nack.append("MSH|^~\\&|SERVER|LOCAL|CLIENT|REMOTE|")
                     .append(Instant.now()).append("||ACK|")
-                    .append(UUID.randomUUID().toString().substring(0, 20)).append("|P|2.5\r");
+                    .append(UuidUtil.generateUuid().substring(0, 20)).append("|P|2.5\r");
             nack.append("MSA|AR|UNKNOWN|").append(genericError).append("\r");
             nack.append("ERR|||207^Application internal error^HL70357||E|||")
                     .append(genericError.substring(0, Math.min(80, genericError.length()))).append("\r");
-            nack.append("NTE|1||InteractionID: ").append(interactionId)
-                    .append(" | TechBDIngestionApiVersion: ").append(appConfig.getVersion());
-            if (errorTraceId != null) {
-                nack.append(" | ErrorTraceID: ").append(errorTraceId);
-            }
-            nack.append("\r");
+            if (FeatureEnum.isEnabled(FeatureEnum.ADD_NTE_SEGMENT_TO_HL7_ACK)) {        
+                nack.append("NTE|1||InteractionID: ").append(interactionId)
+                        .append(" | TechBDIngestionApiVersion: ").append(appConfig.getVersion());
+                if (errorTraceId != null) {
+                    nack.append(" | ErrorTraceID: ").append(errorTraceId);
+                }
+                nack.append("\r");
+            }            
             return nack.toString();
         }
 
@@ -1884,7 +1927,7 @@ public class NettyTcpServer implements MessageSourceProvider {
                 .append(sendingFacility.isEmpty() ? "REMOTE" : sendingFacility).append(fieldSep)
                 .append(Instant.now()).append(fieldSep).append(fieldSep)
                 .append("ACK").append(fieldSep)
-                .append(UUID.randomUUID().toString().substring(0, 20)).append(fieldSep)
+                .append(UuidUtil.generateUuid().substring(0, 20)).append(fieldSep)
                 .append("P").append(fieldSep).append(version).append("\r");
         ack.append("MSA").append(fieldSep).append(finalAckCode).append(fieldSep)
                 .append(messageControlId);
@@ -1898,13 +1941,15 @@ public class NettyTcpServer implements MessageSourceProvider {
                     .append("E").append(fieldSep).append(fieldSep).append(fieldSep)
                     .append(err.substring(0, Math.min(80, err.length()))).append("\r");
         }
-        ack.append("NTE").append(fieldSep).append("1").append(fieldSep).append(fieldSep)
-                .append("InteractionID: ").append(interactionId)
-                .append(" | TechBDIngestionApiVersion: ").append(appConfig.getVersion());
-        if (errorTraceId != null && !"AA".equals(finalAckCode)) {
-            ack.append(" | ErrorTraceID: ").append(errorTraceId);
+        if (FeatureEnum.isEnabled(FeatureEnum.ADD_NTE_SEGMENT_TO_HL7_ACK)) {
+            ack.append("NTE").append(fieldSep).append("1").append(fieldSep).append(fieldSep)
+                    .append("InteractionID: ").append(interactionId)
+                    .append(" | TechBDIngestionApiVersion: ").append(appConfig.getVersion());
+            if (errorTraceId != null && !"AA".equals(finalAckCode)) {
+                ack.append(" | ErrorTraceID: ").append(errorTraceId);
+            }            
+            ack.append("\r");
         }
-        ack.append("\r");
         return ack.toString();
     }
 

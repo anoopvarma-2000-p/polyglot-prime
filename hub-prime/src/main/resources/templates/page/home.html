@@ -52,12 +52,23 @@
                 </ul>
             </div>
         </div>
-
-        <div sec:authorize="isAuthenticated()">
-            <div>You're logged in as GitHub User <span sec:authentication="principal.attributes['name']"></span> with
-                role <code>TODO</code>.</div>
-        </div>
-        <div sec:authorize="isAnonymous()">
+                <div sec:authorize="isAuthenticated()" 
+                    class="flex justify-center items-center h-full text-center">
+                    <div>
+                        You're logged in as 
+                        <span class="font-bold"
+                            th:text="${#authentication.principal.attributes['authProvider'] == 'fusionauth' ? 
+                                        #authentication.principal.attributes['name'] : 
+                                        #authentication.principal.attributes['login']}">
+                        </span>
+                        with role 
+                        <code th:text="${#authentication.principal.attributes['authProvider'] == 'fusionauth' ? 
+                                        #strings.listJoin(#authentication.principal.attributes['role'], ', ') : 
+                                        'admin'}">
+                        </code>.
+                    </div>
+                </div>
+      <div sec:authorize="isAnonymous()">
             <div>You're not logged in so you only have guest privileges.</div>
         </div>
 
@@ -68,7 +79,7 @@
                     th:replace="~{fragments/dashboard :: serverTextStat('HEALTHeLINK', @{/dashboard/stat/fhir/most-recent/healthelink.html})}">
                 </div>
                 <div
-                    th:replace="~{fragments/dashboard :: serverTextStat('Healtheconnections', @{/dashboard/stat/fhir/most-recent/healtheconn.html})}">
+                    th:replace="~{fragments/dashboard :: serverTextStat('HealtheConnections', @{/dashboard/stat/fhir/most-recent/hecdcs.html})}">
                 </div>
                 <div
                     th:replace="~{fragments/dashboard :: serverTextStat('Healthix', @{/dashboard/stat/fhir/most-recent/healthix.html})}">
@@ -89,7 +100,7 @@
                     th:replace="~{fragments/dashboard :: serverTextStat('HEALTHeLINK', @{/dashboard/stat/csv/most-recent/healthelink.html})}">
                 </div>
                 <div
-                    th:replace="~{fragments/dashboard :: serverTextStat('Healtheconnections', @{/dashboard/stat/csv/most-recent/healtheconn.html})}">
+                    th:replace="~{fragments/dashboard :: serverTextStat('HealtheConnections', @{/dashboard/stat/csv/most-recent/hecdcs.html})}">
                 </div>
                 <div
                     th:replace="~{fragments/dashboard :: serverTextStat('Healthix', @{/dashboard/stat/csv/most-recent/healthix.html})}">
@@ -110,7 +121,7 @@
                     th:replace="~{fragments/dashboard :: serverTextStat('HEALTHeLINK', @{/dashboard/stat/ccda/most-recent/healthelink.html})}">
                 </div>
                 <div
-                    th:replace="~{fragments/dashboard :: serverTextStat('Healtheconnections', @{/dashboard/stat/ccda/most-recent/healtheconn.html})}">
+                    th:replace="~{fragments/dashboard :: serverTextStat('HealtheConnections', @{/dashboard/stat/ccda/most-recent/hecdcs.html})}">
                 </div>
                 <div
                     th:replace="~{fragments/dashboard :: serverTextStat('Healthix', @{/dashboard/stat/ccda/most-recent/healthix.html})}">
@@ -131,7 +142,7 @@
                     th:replace="~{fragments/dashboard :: serverTextStat('HEALTHeLINK', @{/dashboard/stat/hl7v2/most-recent/healthelink.html})}">
                 </div>
                 <div
-                    th:replace="~{fragments/dashboard :: serverTextStat('Healtheconnections', @{/dashboard/stat/hl7v2/most-recent/healtheconn.html})}">
+                    th:replace="~{fragments/dashboard :: serverTextStat('HealtheConnections', @{/dashboard/stat/hl7v2/most-recent/hecdcs.html})}">
                 </div>
                 <div
                     th:replace="~{fragments/dashboard :: serverTextStat('Healthix', @{/dashboard/stat/hl7v2/most-recent/healthix.html})}">

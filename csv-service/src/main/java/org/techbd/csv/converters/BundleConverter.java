@@ -2,8 +2,6 @@ package org.techbd.csv.converters;
 
 import java.util.Date;
 import java.util.List;
-import java.util.UUID;
-
 import org.hl7.fhir.r4.model.Bundle;
 import org.hl7.fhir.r4.model.CanonicalType;
 import org.hl7.fhir.r4.model.Coding;
@@ -13,9 +11,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.techbd.csv.model.DemographicData;
-import org.techbd.csv.model.QeAdminData;
+import org.techbd.csv.model.ScreeningProfileData;
 import org.techbd.csv.util.CsvConversionUtil;
 import org.techbd.corelib.util.CoreFHIRUtil;
+import org.techbd.corelib.util.UuidUtil;
 
 import io.micrometer.common.util.StringUtils;
 
@@ -35,9 +34,9 @@ public class BundleConverter {
      * @return a Bundle with type set to COLLECTION, one empty entry, and Meta
      *         information.
      */
-    public Bundle generateEmptyBundle(String interactionId, DemographicData demographicData, String baseFHIRUrl, QeAdminData qeAdminData) {
+    public Bundle generateEmptyBundle(String interactionId, DemographicData demographicData, String baseFHIRUrl, ScreeningProfileData screeningProfileData) {
         Bundle bundle = new Bundle();
-        bundle.setId(CsvConversionUtil.sha256(UUID.randomUUID().toString()));
+        bundle.setId(CsvConversionUtil.sha256(UuidUtil.generateUuid()));
         bundle.setType(Bundle.BundleType.TRANSACTION);
         Meta meta = new Meta();
         meta.setLastUpdated(new Date());
@@ -47,7 +46,7 @@ public class BundleConverter {
         } else {
             meta.setProfile(List.of(new CanonicalType(CoreFHIRUtil.getBundleProfileUrl())));
         }
-        if ("Yes".equalsIgnoreCase(qeAdminData.getVisitPart2Flag())) {
+        if ("Yes".equalsIgnoreCase(screeningProfileData.getVisitPart2Flag())) {
             Coding ethCoding = new Coding();
             ethCoding.setSystem("http://terminology.hl7.org/CodeSystem/v3-ActCode");
             ethCoding.setCode("ETH");
@@ -55,6 +54,25 @@ public class BundleConverter {
 
             meta.addSecurity(ethCoding);
         }
+
+        if ("Yes".equalsIgnoreCase(screeningProfileData.getVisitOmhFlag())) {
+            Coding ethCoding = new Coding();
+            ethCoding.setSystem("http://terminology.hl7.org/CodeSystem/v3-ActCode");
+            ethCoding.setCode("MH");
+            ethCoding.setDisplay("Mental health information sensitivity");
+
+            meta.addSecurity(ethCoding);
+        }
+
+        if ("Yes".equalsIgnoreCase(screeningProfileData.getVisitOpwddFlag())) {
+            Coding ethCoding = new Coding();
+            ethCoding.setSystem("http://terminology.hl7.org/CodeSystem/v3-ActCode");
+            ethCoding.setCode("DVD");
+            ethCoding.setDisplay("Developmental disability information sensitivity");
+
+            meta.addSecurity(ethCoding);
+        }
+
         bundle.setMeta(meta);
         LOG.info("Empty FHIR Bundle template generated with Meta and one empty entry for interactionId : {}.",
                 interactionId);

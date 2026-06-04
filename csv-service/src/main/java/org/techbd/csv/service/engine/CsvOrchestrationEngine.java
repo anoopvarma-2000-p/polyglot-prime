@@ -44,6 +44,7 @@ import org.techbd.corelib.config.State;
 import org.techbd.corelib.util.AppLogger;
 import org.techbd.corelib.util.CoreFHIRUtil;
 import org.techbd.corelib.util.TemplateLogger;
+import org.techbd.corelib.util.UuidUtil;
 import org.techbd.csv.model.CsvDataValidationStatus;
 import org.techbd.csv.model.CsvProcessingMetrics;
 import org.techbd.csv.model.FileDetail;
@@ -158,7 +159,7 @@ public class CsvOrchestrationEngine {
 
         public OrchestrationSession build() {
             if (sessionId == null) {
-                sessionId = UUID.randomUUID().toString();
+                sessionId = UuidUtil.generateUuid();
             }
             if (device == null) {
                 device = Device.INSTANCE;
@@ -594,7 +595,7 @@ public class CsvOrchestrationEngine {
                     }
                     List<FileDetail> fileDetails = entry.getValue();
                     Map<String, Object> operationOutcomeForThisGroup;
-                    final String groupInteractionId = UUID.randomUUID().toString();
+                    final String groupInteractionId = UuidUtil.generateUuid();
                     boolean isGroupValid = false;
                     
                     if (isGroupComplete(fileDetails)) {
@@ -656,7 +657,7 @@ public class CsvOrchestrationEngine {
                 String masterInteractionId) throws Exception {
 
             Instant initiatedAt = Instant.now();
-            String groupInteractionId = UUID.randomUUID().toString();
+            String groupInteractionId = UuidUtil.generateUuid();
 
             // Determine missing file types
             Set<FileType> requiredFileTypes = Set.of(
@@ -797,7 +798,8 @@ public class CsvOrchestrationEngine {
             final VfsIngressConsumer consumer = vfsCoreService.createConsumer(
                     inboundFO,
                     this::extractGroupId,
-                    this::isGroupComplete);
+                    this::isGroupComplete,
+                    masterInteractionId);
 
             // Important: Capture the returned session UUID and processed file paths
             final UUID processId = vfsCoreService.processFiles(consumer, ingresshomeFO,masterInteractionId);

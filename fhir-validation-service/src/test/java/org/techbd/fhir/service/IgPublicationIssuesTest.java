@@ -14,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.techbd.corelib.util.UuidUtil;
 import org.techbd.fhir.service.engine.OrchestrationEngine;
 import org.techbd.fhir.service.engine.OrchestrationEngine.ValidationResult;
 
@@ -96,6 +97,24 @@ public class IgPublicationIssuesTest extends BaseIgValidationTest {
         }
 
         @Test
+        @DisplayName("Validate SHIN-NY IG NY ScreeningResponse Part2 ExampleFile")
+        void testValidateShinnyIG_NYScreeningResponsePart2ExampleFile() throws IOException {
+                validateFile("shinny-examples/Bundle-NYScreeningResponseExamplePart2.json");
+        }
+
+        @Test
+        @DisplayName("Validate SHIN-NY IG NY ScreeningResponse OWH ExampleFile")
+        void testValidateShinnyIG_NYScreeningResponseOMHExampleFile() throws IOException {
+                validateFile("shinny-examples/Bundle-NYScreeningResponseExampleOMH.json");
+        }
+
+        @Test
+        @DisplayName("Validate SHIN-NY IG NY ScreeningResponse OPWDD ExampleFile")
+        void testValidateShinnyIG_NYScreeningResponseOPWDDExampleFile() throws IOException {
+                validateFile("shinny-examples/Bundle-NYScreeningResponseExampleOPWDD.json");
+        }
+
+        @Test
         @DisplayName("Validate Test SHIN-NY IG AHCHRSN ScreeningResponse ExampleFile")
         void testValidateTestShinnyIG_AHCHRSNScreeningResponseExampleFile() throws IOException {
                 validateFile("test-shinny-examples/Bundle-AHCHRSNScreeningResponseExample.json");
@@ -167,6 +186,25 @@ public class IgPublicationIssuesTest extends BaseIgValidationTest {
                 validateFile("test-shinny-examples/Bundle-NYScreeningResponseExampleDeclined9to12.json");
         }
 
+        @Test
+        @DisplayName("Validate Test SHIN-NY IG NY ScreeningResponse Part2 ExampleFile")
+        void testValidateTestShinnyIG_NYScreeningResponsePart2ExampleFile() throws IOException {
+                validateFile("test-shinny-examples/Bundle-NYScreeningResponseExamplePart2.json");
+        }
+
+        @Test
+        @DisplayName("Validate Test SHIN-NY IG NY ScreeningResponse OWH ExampleFile")
+        void testValidateTestShinnyIG_NYScreeningResponseOMHExampleFile() throws IOException {
+                validateFile("test-shinny-examples/Bundle-NYScreeningResponseExampleOMH.json");
+        }
+
+        @Test
+        @DisplayName("Validate Test SHIN-NY IG NY ScreeningResponse OPWDD ExampleFile")
+        void testValidateTestShinnyIG_NYScreeningResponseOPWDDExampleFile() throws IOException {
+                validateFile("test-shinny-examples/Bundle-NYScreeningResponseExampleOPWDD.json");
+        }
+                
+
         private void validateFile(String filePath) throws IOException {
                 List<OrchestrationEngine.ValidationResult> results = getValidationErrors(filePath);
                 assertValidationResults(results);
@@ -201,7 +239,7 @@ public class IgPublicationIssuesTest extends BaseIgValidationTest {
                                 "src/test/resources/org/techbd/ig-examples/" + exampleFileName));
                 OrchestrationEngine.OrchestrationSession session = engine.session()
                                 .withPayloads(List.of(payload))
-                                .withSessionId(UUID.randomUUID().toString())
+                                .withSessionId(UuidUtil.generateUuid())
                                 .withTracer(tracer)
                                 .addHapiValidationEngine()
                                 .build();

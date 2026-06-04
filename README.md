@@ -59,7 +59,7 @@ maintainability, and scalability. Here are the key aspects of our strategy:
 │   └── utils/                        # Testing utilities
 │       └── logger-util.ts
 │
-├── core-lib/                         # Shared Java core library for common utilities and components
+├── hub-core-lib/                         # Shared Java core library for common utilities and components
 │   ├── src/
 │   │   ├── main/
 │   │   │   └── java/
@@ -207,7 +207,7 @@ Dedicated FHIR compliance validation service that validates data against FHIR sp
 
 ### Shared Libraries
 
-#### core-lib
+#### hub-core-lib
 Shared Java library containing common utilities, models, and components used across multiple services.
 
 #### nexus-core-lib

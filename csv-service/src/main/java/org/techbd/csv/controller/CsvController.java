@@ -4,7 +4,6 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.techbd.corelib.config.Configuration;
 import org.techbd.corelib.util.CoreFHIRUtil;
+import org.techbd.corelib.util.UuidUtil;
 import org.techbd.csv.config.AppConfig;
 import org.techbd.csv.config.Constants;
 import org.techbd.csv.service.CsvService;
@@ -67,6 +67,12 @@ public class CsvController {
       @Parameter(description = "Tenant ID, a mandatory parameter.", required = true) @RequestHeader(value = Configuration.Servlet.HeaderName.Request.TENANT_ID) String tenantId,
       @Parameter(hidden = true, description = "Parameter to specify origin of the request.", required = false) @RequestParam(value = "origin", required = false,defaultValue = "HTTP") String origin,
       @Parameter(hidden = true, description = "Parameter to specify sftp session id.", required = false) @RequestParam(value = "sftp-session-id", required = false) String sftpSessionId,
+      @Parameter(hidden = false, description = "Optional parameter to decide whether response should be synchronous or asynchronous. " +
+          "Default: `immediate=true` → request is processed synchronously. " +
+          "Optional: `immediate=false` → request is processed asynchronously. " +
+          "When using `immediate=false`, an interim response is returned containing a zipFileInteractionId. " +
+          "The full operation outcome can be retrieved from Hub UI → Interactions → CSV via HTTP(s) tab using the provided zipFileInteractionId. " +
+          "This option is useful for large ZIP files that may otherwise result in timeout issues.", required = false) @RequestParam(value = "immediate", required = false,defaultValue = "true") boolean isSync,
       HttpServletRequest request,
       HttpServletResponse response)
       throws Exception {
@@ -75,12 +81,12 @@ public class CsvController {
     validateTenantId(tenantId);
     Map <String,Object> requestDetailsMap = CoreFHIRUtil.extractRequestDetails(request);
     Map<String, Object> headerParameters = CoreFHIRUtil.buildHeaderParametersMap(tenantId, null,
-        null,
         null, null, null, null,
         null,null);   
     CoreFHIRUtil.buildRequestParametersMap(requestDetailsMap,null,
         null, null, null, null, request.getRequestURI());
-    requestDetailsMap.put(Constants.MASTER_INTERACTION_ID, UUID.randomUUID().toString());
+    requestDetailsMap.put(Constants.MASTER_INTERACTION_ID,UuidUtil.generateUuid());
+    requestDetailsMap.put(Constants.IMMEDIATE, isSync);
     requestDetailsMap.put(Constants.OBSERVABILITY_METRIC_INTERACTION_START_TIME, Instant.now().toString());
     Map<String, Object> responseParameters = new HashMap<>();
     requestDetailsMap.putAll(headerParameters);
@@ -102,6 +108,10 @@ public class CsvController {
       @Parameter(hidden = true, description = "Parameter to specify sftp session id.", required = false) @RequestParam(value = "sftp-session-id", required = false) String sftpSessionId,
       @Parameter(hidden = true, description = "Optional parameter to decide whether response should be synchronous or asynchronous.", required = false) @RequestParam(value = "immediate", required = false,defaultValue = "true") boolean isSync,
       @Parameter(description = "Optional header to set validation severity level (`information`, `warning`, `error`, `fatal`).", required = false) @RequestHeader(value = "X-TechBD-Validation-Severity-Level", required = false) String validationSeverityLevel,
+      @RequestHeader(value = "X-TechBD-Data-Ledger-Tracking", required = false, defaultValue = "false")
+      boolean dataLedgerTracking,
+      @RequestHeader(value = "X-TechBD-Data-Ledger-diagnostics", required = false, defaultValue = "false")
+      boolean dataLedgerDiagnostics,
       HttpServletRequest request,
       HttpServletResponse response) throws Exception {
         
@@ -110,14 +120,15 @@ public class CsvController {
     // FHIRUtil.validateBaseFHIRProfileUrl(appConfig.getIgPackages(), baseFHIRURL); //TODO CHECK IF VALID IG PACKAGE
     Map <String,Object> requestDetailsMap = CoreFHIRUtil.extractRequestDetails(request);
     Map<String, Object> headerParameters = CoreFHIRUtil.buildHeaderParametersMap(tenantId, customDataLakeApi,
-        null,
         null, validationSeverityLevel, null, null,
         null,null);    
     CoreFHIRUtil.buildRequestParametersMap(requestDetailsMap,null,
         null, null, null, null, request.getRequestURI());
-    requestDetailsMap.put(Constants.MASTER_INTERACTION_ID, UUID.randomUUID().toString());
+    requestDetailsMap.put(Constants.MASTER_INTERACTION_ID, UuidUtil.generateUuid());
     requestDetailsMap.put(Constants.OBSERVABILITY_METRIC_INTERACTION_START_TIME, Instant.now().toString());
     requestDetailsMap.put(Constants.IMMEDIATE, isSync);
+    requestDetailsMap.put(Constants.DATA_LEDGER_TRACKING, dataLedgerTracking);
+    requestDetailsMap.put(Constants.DATA_LEDGER_DIAGNOSTICS, dataLedgerDiagnostics);
     if (validationSeverityLevel != null) {
       requestDetailsMap.put(Constants.VALIDATION_SEVERITY_LEVEL, validationSeverityLevel);
     }

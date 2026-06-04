@@ -34,6 +34,7 @@ import org.techbd.corelib.service.dataledger.DataLedgerApiClient;
 import org.techbd.corelib.service.dataledger.DataLedgerApiClient.DataLedgerPayload;
 import org.techbd.corelib.util.AppLogger;
 import org.techbd.corelib.util.TemplateLogger;
+import org.techbd.corelib.util.UuidUtil;
 import org.techbd.fhir.config.AppConfig;
 import org.techbd.fhir.config.Constants;
 import org.techbd.fhir.exceptions.ErrorCode;
@@ -142,7 +143,8 @@ public class FHIRService {
                 throw new IllegalArgumentException("Interaction ID must be provided in the request parameters.");
             }
 				final String bundleId = FHIRUtil.extractBundleId(payload, tenantId);
-			if (!SourceType.CSV.name().equalsIgnoreCase(source)
+			final boolean isHealthCheck = healthCheck != null && "true".equalsIgnoreCase(healthCheck.trim());
+			if (!isHealthCheck && !SourceType.CSV.name().equalsIgnoreCase(source)
 					&& !SourceType.CCDA.name().equalsIgnoreCase(source)
 					&& !SourceType.HL7V2.name().equalsIgnoreCase(source)) {
 				DataLedgerPayload dataLedgerPayload = null;
@@ -157,11 +159,11 @@ public class FHIRService {
 				}
 				final var dataLedgerProvenance = "%s.processBundle".formatted(FHIRService.class.getName());
 				coreDataLedgerApiClient.processRequest(dataLedgerPayload, interactionId, dataLedgerProvenance,
-				SourceType.FHIR.name(), null, FeatureEnum.isEnabled(FeatureEnum.FEATURE_DATA_LEDGER_TRACKING), FeatureEnum.isEnabled(FeatureEnum.FEATURE_DATA_LEDGER_DIAGNOSTICS));
+				SourceType.FHIR.name(), null, (boolean) requestParameters.get(Constants.DATA_LEDGER_TRACKING), (boolean) requestParameters.get(Constants.DATA_LEDGER_DIAGNOSTICS));
 			}
             LOG.info("Bundle processing start at {} for interaction id {}.", interactionId);
             
-			if (!"true".equalsIgnoreCase(healthCheck != null ? healthCheck.trim() : null)) {
+			if (!isHealthCheck) {
 				registerOriginalPayload(requestParameters,
 						payload, interactionId, groupInteractionId, masterInteractionId,
 						source, requestUriToBeOverriden, coRrelationId);
@@ -177,18 +179,17 @@ public class FHIRService {
                                 final Map<String, Object> immediateResult = validate(requestParameters, payload, interactionId, provenance,
                         source);
                                                final Map<String, Object> result = Map.of("OperationOutcome", immediateResult);
-				if (!"true".equalsIgnoreCase(healthCheck != null ? healthCheck.trim() : null)) {
+				if (!isHealthCheck) {
 					payloadWithDisposition = registerValidationResults(requestParameters,
 							result, interactionId, groupInteractionId, masterInteractionId,
 							source, requestUriToBeOverriden);
 				}
+                if (isHealthCheck) {
+                    return result;
+                }
                 if (StringUtils.isNotEmpty(requestUri)
                         && (requestUri.equals("/Bundle/$validate") || requestUri.equals("/Bundle/$validate/"))) {
                     return payloadWithDisposition;
-                }
-
-                if ("true".equalsIgnoreCase(healthCheck != null ? healthCheck.trim() : null)) {
-                    return result;
                 }
 
                 if (isActionDiscard(payloadWithDisposition)) {
@@ -196,8 +197,12 @@ public class FHIRService {
                     return payloadWithDisposition;
                 }
             } catch (final JsonValidationException ex) {
+				final Map<String, Object> operationOutcome = buildOperationOutcome(ex, interactionId);
+				if (isHealthCheck) {
+					return operationOutcome;
+				}
 				payloadWithDisposition = registerValidationResults(requestParameters,
-						buildOperationOutcome(ex, interactionId), interactionId, groupInteractionId, masterInteractionId,
+						operationOutcome, interactionId, groupInteractionId, masterInteractionId,
 						source, requestUriToBeOverriden);
                 LOG.info("Exception occurred: {} while processing bundle for interaction id :{} ", ex.getMessage(),interactionId); 
             }
@@ -320,7 +325,7 @@ public class FHIRService {
 			}
 			prepareRequestBase(
 					rihr,
-					interactionId != null ? interactionId : UUID.randomUUID().toString(),
+					interactionId != null ? interactionId : UuidUtil.generateUuid(),
 					groupInteractionId,
 					masterInteractionId,
 					sourceType,
@@ -440,7 +445,7 @@ public class FHIRService {
 				: (String) requestParameters.get(Constants.USER_NAME));
 		rihr.setPUserId(null == requestParameters.get(Constants.USER_ID) ? Constants.DEFAULT_USER_ID
 				: (String) requestParameters.get(Constants.USER_ID));
-		rihr.setPUserSession(UUID.randomUUID().toString());
+		rihr.setPUserSession(UuidUtil.generateUuid());
 		rihr.setPUserRole(null == requestParameters.get(Constants.USER_ROLE) ? Constants.DEFAULT_USER_ROLE
 				: (String) requestParameters.get(Constants.USER_ROLE));
 	}
@@ -455,7 +460,7 @@ public class FHIRService {
             var requestedIgVersion = (String) requestParameters.get(Constants.SHIN_NY_IG_VERSION);
             LOG.info("headerIgVersion : "+ requestedIgVersion);
 			final var sessionBuilder = engine.session()
-					.withSessionId(UUID.randomUUID().toString())
+					.withSessionId(UuidUtil.generateUuid())
 					.onDevice(Device.createDefault())
 					.withInteractionId(interactionId)
 					.withPayloads(List.of(payload))
@@ -1039,8 +1044,8 @@ public class FHIRService {
 
     @SuppressWarnings("unchecked")
     public Map<String, Object> getFailedNyecSubmissionBundles(
-            final OffsetDateTime startDate,
-            final OffsetDateTime endDate,final String tenantId,boolean includeDetails) {
+            final String startDate,
+            final String endDate,final String tenantId,boolean includeDetails) {
 
         LOG.info("Fetching failed NYEC submission bundles | startDate={} | endDate={}",
                 startDate, endDate);

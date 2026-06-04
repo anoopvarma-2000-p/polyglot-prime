@@ -7,16 +7,13 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 import org.springframework.lang.NonNull;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Component;
 import org.techbd.conf.Configuration;
-import org.techbd.udi.auto.jooq.ingress.routines.RegisterUserInteraction;
 import org.techbd.util.JsonText.ByteArrayToStringOrJsonSerializer;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -208,30 +205,30 @@ public class Interactions {
         }
     }
 
-    public static void setUserDetails(RegisterUserInteraction rihr, HttpServletRequest request) {
-        var curUserName = "API_USER";
-        var gitHubLoginId = "N/A";
-        final var sessionId = request.getRequestedSessionId();
-        var userRole = "API_ROLE";
-        if (!Constant.isStatelessApiUrl(request.getRequestURI())) { // Call only if not a stateless URL
-            final var curUser = GitHubUserAuthorizationFilter.getAuthenticatedUser(request);
-            if (curUser.isPresent()) {
-                final var ghUser = curUser.get().ghUser();
-                if (ghUser != null) {
-                    curUserName = Optional.ofNullable(ghUser.name()).orElse("NO_DATA");
-                    gitHubLoginId = Optional.ofNullable(ghUser.gitHubId()).orElse("NO_DATA");
-                    userRole = curUser.get().principal().getAuthorities().stream()
-                            .map(GrantedAuthority::getAuthority)
-                            .collect(Collectors.joining(","));
-                    userRole = "DEFAULT_ROLE"; // TODO -set user role
-                }
-            }
-        }
-        rihr.setPUserName(curUserName);
-        rihr.setPUserId(gitHubLoginId);
-        rihr.setPUserSession(sessionId);
-        rihr.setPUserRole(userRole);
-    }
+    // public static void setUserDetails(RegisterUserInteraction rihr, HttpServletRequest request) {
+    //     var curUserName = "API_USER";
+    //     var gitHubLoginId = "N/A";
+    //     final var sessionId = request.getRequestedSessionId();
+    //     var userRole = "API_ROLE";
+    //     if (!Constant.isStatelessApiUrl(request.getRequestURI())) { // Call only if not a stateless URL
+    //         final var curUser = GitHubUserAuthorizationFilter.getAuthenticatedUser(request);
+    //         if (curUser.isPresent()) {
+    //             final var ghUser = curUser.get().ghUser();
+    //             if (ghUser != null) {
+    //                 curUserName = Optional.ofNullable(ghUser.name()).orElse("NO_DATA");
+    //                 gitHubLoginId = Optional.ofNullable(ghUser.gitHubId()).orElse("NO_DATA");
+    //                 userRole = curUser.get().principal().getAuthorities().stream()
+    //                         .map(GrantedAuthority::getAuthority)
+    //                         .collect(Collectors.joining(","));
+    //                 userRole = "DEFAULT_ROLE"; // TODO -set user role
+    //             }
+    //         }
+    //     }
+    //     rihr.setPUserName(curUserName);
+    //     rihr.setPUserId(gitHubLoginId);
+    //     rihr.setPUserSession(sessionId);
+    //     rihr.setPUserRole(userRole);
+    // }
 
     public static void setActiveInteraction(final @NonNull HttpServletRequest request,
             final @NonNull Interactions.RequestResponseEncountered rre) {

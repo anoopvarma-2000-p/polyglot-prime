@@ -18,6 +18,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.techbd.util.SystemDiagnosticsLogger;
 
 import io.swagger.v3.oas.annotations.media.Content;
@@ -94,6 +95,15 @@ public class GlobalExceptionHandler {
         return handleException(ex, "Unsupported media type", HttpStatus.UNSUPPORTED_MEDIA_TYPE);
     }
 
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResourceFoundException(
+            NoResourceFoundException ex, HttpServletRequest request) {
+        String path = request.getRequestURI();
+        LOG.error("No resource found for path: {}", path, ex);
+        return handleException(ex, "Invalid request. The requested resource was not found: " + path,
+                HttpStatus.NOT_FOUND);
+    }
+    
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     @ApiResponse(responseCode = "500", description = "Internal Server Error", content = @Content(mediaType = "application/json", examples = @ExampleObject(value = "{\"status\":\"Error\",\"message\":\"An unexpected system error occurred.\"}")))
