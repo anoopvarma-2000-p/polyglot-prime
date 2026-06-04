@@ -136,15 +136,25 @@ public class InteractionsFilter extends OncePerRequestFilter {
 
         LOG.info("Incoming Request: " + requestUri + " | Host: " + hostHeader);
 
-        // Allow ALB requests to `/metadata`
-        if (requestUri.contains("/metadata")) {
-            System.out.println("Bypassing Host check for: " + requestUri);
+        // Strip port from Host header before allowlist comparison so that
+        // "host.example.com:443" and "host.example.com" both match the same entry.
+        String hostname = hostHeader != null ? hostHeader.split(":")[0].trim() : "";
+
+        // Bypass Host validation only for AWS ALB health checks hitting /metadata.
+        // All other /metadata requests (e.g. from API clients) are still validated.
+        boolean isAlbHealthCheck = requestUri.contains("/metadata")
+                && httpRequest.getHeader("User-Agent") != null
+                && httpRequest.getHeader("User-Agent").startsWith("ELB-HealthChecker");
+        if (isAlbHealthCheck) {
             chain.doFilter(origRequest, origResponse);
             return;
         }
 
-        // Validate Host header for other requests
-        if (!allowedHosts.contains(hostHeader)) {
+        // Validate Host header for all other requests
+        List<String> normalizedAllowedHosts = allowedHosts.stream()
+                .map(h -> h.split(":")[0].trim())
+                .collect(Collectors.toList());
+        if (!normalizedAllowedHosts.contains(hostname)) {
             LOG.error("Invalid Host Header: " + hostHeader);
             origResponse.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             return;

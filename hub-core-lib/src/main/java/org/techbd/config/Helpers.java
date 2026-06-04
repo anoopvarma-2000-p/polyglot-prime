@@ -12,6 +12,15 @@ import jakarta.servlet.http.HttpServletRequest;
 public class Helpers {
 
     public static String getBaseUrl(HttpServletRequest request) {
+        // Use a configured trusted base URL to prevent Host Header Injection (CWE-113).
+        // Set TECHBD_BASE_URL in the deployment environment (e.g. https://synthetic.hub.stage.techbd.org).
+        String configuredBaseUrl = System.getenv("TECHBD_BASE_URL");
+        if (configuredBaseUrl != null && !configuredBaseUrl.isBlank()) {
+            return configuredBaseUrl.endsWith("/")
+                    ? configuredBaseUrl.substring(0, configuredBaseUrl.length() - 1)
+                    : configuredBaseUrl;
+        }
+
         String scheme = request.getScheme(); // http
         String serverName = request.getServerName(); // hostname.com
         int serverPort = request.getServerPort(); // 80

@@ -149,6 +149,31 @@ public class InteractionsFilter extends OncePerRequestFilter {
                 requestToUse.setAttribute(Constants.INTERACTION_ID, interactionId);
                 LOG.info("Incoming Request - interactionId={}", interactionId);
 
+                // Validate Host header against TECHBD_ALLOWED_HOSTS to prevent Host Header
+                // Injection (CWE-113). Strip port before comparing so that requests with
+                // "host:port" in the Host header are handled correctly.
+                String allowedHostsEnv = System.getenv("TECHBD_ALLOWED_HOSTS");
+                if (allowedHostsEnv != null && !allowedHostsEnv.isBlank()) {
+                    String rawHost = requestToUse.getHeader("Host");
+                    String hostname = rawHost != null ? rawHost.split(":")[0].trim() : "";
+                    boolean hostAllowed = Arrays.stream(allowedHostsEnv.split(","))
+                            .map(String::trim)
+                            .anyMatch(hostname::equals);
+                    if (!hostAllowed) {
+                        LOG.warn("InteractionsFilter: rejected request with invalid Host header '{}' interactionId={}", rawHost, interactionId);
+                        origResponse.setStatus(HttpStatus.BAD_REQUEST.value());
+                        origResponse.setContentType("application/json;charset=UTF-8");
+                        try {
+                            origResponse.getWriter()
+                                    .write("{\"error\":\"Bad Request\",\"description\":\"Invalid Host header\"}");
+                            origResponse.getWriter().flush();
+                        } catch (IOException ioe) {
+                            LOG.error("InteractionsFilter: failed to write invalid-host response interactionId={}", interactionId);
+                        }
+                        return;
+                    }
+                }
+
                 // 1) determine request port (prefer X-Forwarded-Port header)
                 int requestPort = resolveRequestPort(requestToUse);
                 LOG.info("InteractionsFilter: resolved request port={} interactionId: {}", requestPort, interactionId);
