@@ -18,9 +18,7 @@ public class Constant {
             "/login/**", "/oauth2/**",
             "/",
             "/metadata",
-            "/docs/api/interactive/swagger-ui/**", "/support/**",
-            "/docs/api/interactive/**",
-            "/docs/api/openapi/**",
+            "/support/**",
             "/error", "/error/**"
     };
 
