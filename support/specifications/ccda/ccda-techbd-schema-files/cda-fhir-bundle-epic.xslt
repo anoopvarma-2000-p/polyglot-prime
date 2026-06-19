@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Version : 0.1.13 -->
+<!-- Version : 0.1.16 -->
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0"
                 xmlns:ccda="urn:hl7-org:v3"
                 xmlns:fhir="http://hl7.org/fhir"
@@ -38,8 +38,6 @@
   <xsl:param name="encounterResourceId"/>
   <xsl:param name="consentResourceId"/>
   <xsl:param name="organizationResourceId"/>
-  <xsl:param name="questionnaireResourceId"/>
-  <xsl:param name="observationResourceSha256Id"/>
   <xsl:param name="sexualOrientationResourceId"/>
   <xsl:param name="questionnaireResponseResourceSha256Id"/>
   <xsl:param name="grouperObservationResourceSha256Id"/> 
@@ -50,6 +48,7 @@
   <xsl:param name="X-TechBD-Part2"/>
   <xsl:param name="X-TechBD-OMH"/>
   <xsl:param name="X-TechBD-OPWDD"/>
+  <xsl:param name="organizationName"/>
 
   <!-- Parameters to get FHIR resource profile URLs -->
   <xsl:param name="baseFhirUrl"/>
@@ -159,7 +158,7 @@
   <!-- End of Guthrie logic -->
 
   <!-- Get Organization name from the first encounter entry -->
-  <xsl:variable name="organizationName" select="/ccda:ClinicalDocument/ccda:component/ccda:structuredBody/ccda:component/ccda:section[@ID='encounters']/ccda:entry[1]/ccda:encounter/ccda:participant[@typeCode='LOC' and position()=1]/ccda:participantRole[@classCode='SDLOC']/ccda:playingEntity/ccda:name"/>
+  <!-- <xsl:variable name="organizationName" select="/ccda:ClinicalDocument/ccda:component/ccda:structuredBody/ccda:component/ccda:section[@ID='encounters']/ccda:entry[1]/ccda:encounter/ccda:participant[@typeCode='LOC' and position()=1]/ccda:participantRole[@classCode='SDLOC']/ccda:playingEntity/ccda:name"/> -->
 
   <xsl:template match="/">
   {
@@ -207,7 +206,7 @@
     , "entry": [
       <xsl:apply-templates select="/ccda:ClinicalDocument/ccda:recordTarget/ccda:patientRole 
                                 | /ccda:ClinicalDocument/ccda:componentOf/ccda:encompassingEncounter 
-                                | /ccda:ClinicalDocument/ccda:component/ccda:structuredBody/ccda:component/ccda:section[@ID='sexualOrientation']/ccda:entry/ccda:observation
+                                | /ccda:ClinicalDocument/ccda:component/ccda:structuredBody/ccda:component/ccda:section[@ID='sexualOrientation']/ccda:entry/ccda:observation[ccda:code/@code='76690-7']
                                 | /ccda:ClinicalDocument/ccda:component/ccda:structuredBody/ccda:component/ccda:section[@ID='observations']/ccda:entry/ccda:observation/ccda:entryRelationship/ccda:observation/ccda:entryRelationship
                                 | /ccda:ClinicalDocument/ccda:authorization/ccda:consent 
                                 | /ccda:ClinicalDocument/ccda:author
@@ -473,15 +472,71 @@
           }
         </xsl:if>
 
-        <!-- GenderCode extension -->
-        <xsl:if test="string(ccda:patient/ccda:administrativeGenderCode/@code)">
-          <xsl:if test="ccda:patient/ccda:raceCode or ccda:patient/ccda:ethnicGroupCode/@code">,</xsl:if>
-        {
-            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-birthsex", 
-            "valueCode": "<xsl:call-template name='mapAdministrativeGenderCode'>
-                              <xsl:with-param name='genderCode' select='ccda:patient/ccda:administrativeGenderCode/@code'/>
-                          </xsl:call-template>"
-        }
+        <!-- birthSex extension -->
+        <xsl:variable name="birthSexEntry"
+                              select="/ccda:ClinicalDocument
+                                    /ccda:component
+                                    /ccda:structuredBody
+                                    /ccda:component
+                                    /ccda:section[@ID='sexualOrientation']
+                                    /ccda:entry
+                                    /ccda:observation[
+                                        ccda:code/@code='76689-9'
+                                        and (
+                                            string-length(normalize-space(ccda:value/@code)) > 0
+                                            or
+                                            string-length(normalize-space(ccda:value/@displayName)) > 0
+                                        )
+                                    ]"/>
+        <xsl:if test="$birthSexEntry">
+              <xsl:variable name="birthSex">
+                  <xsl:choose>
+                      <xsl:when test="$birthSexEntry/ccda:value/@code">
+                          <xsl:value-of select="$birthSexEntry/ccda:value/@code"/>
+                      </xsl:when>
+                      <xsl:otherwise>
+                          <xsl:value-of select="$birthSexEntry/ccda:value/@displayName"/>
+                      </xsl:otherwise>
+                  </xsl:choose>
+              </xsl:variable>
+
+							<xsl:if test="ccda:patient/ccda:raceCode or ccda:patient/ccda:ethnicGroupCode/@code">,</xsl:if>
+              {
+                  "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-birthsex", 
+                  "valueCode": "<xsl:call-template name="mapAdministrativeGenderCode">
+                                    <xsl:with-param name="genderCode" select="$birthSex"/>
+                                </xsl:call-template>"
+              }
+        </xsl:if>
+
+        <!-- Gender Identity extension -->
+        <xsl:variable name="genderIdentityEntry" select="/ccda:ClinicalDocument/ccda:component/ccda:structuredBody/ccda:component/ccda:section[@ID='sexualOrientation']/ccda:entry/ccda:observation[ccda:code/@code='76691-5']"/>
+        <xsl:if test="$genderIdentityEntry">
+          <xsl:if test="ccda:patient/ccda:raceCode or ccda:patient/ccda:ethnicGroupCode/@code or string($birthSexEntry)">,</xsl:if>
+          {
+              "url" : "<xsl:value-of select='$baseFhirUrl'/>/StructureDefinition/shinny-gender-identity",
+              "valueCodeableConcept" : {
+                "coding" : [ {
+                  "code" : "<xsl:choose>
+                              <xsl:when test='$genderIdentityEntry/ccda:value/@code'><xsl:value-of select='$genderIdentityEntry/ccda:value/@code'/></xsl:when>
+                              <xsl:otherwise> <xsl:value-of select='$genderIdentityEntry/ccda:value/@nullFlavor'/> </xsl:otherwise>
+                            </xsl:choose>",
+                  "system" : "<xsl:choose>
+                                  <xsl:when test="$genderIdentityEntry/ccda:value/@code and $genderIdentityEntry/ccda:value/@code != 'UNK'">http://snomed.info/sct</xsl:when>
+                                  <xsl:otherwise>http://terminology.hl7.org/CodeSystem/v3-NullFlavor</xsl:otherwise>
+                              </xsl:choose>",
+                  "display" : "<xsl:choose>
+                                  <xsl:when test='$genderIdentityEntry/ccda:value/@displayName'><xsl:value-of select='$genderIdentityEntry/ccda:value/@displayName'/></xsl:when>
+                                  <xsl:otherwise>
+                                    <xsl:call-template name='mapGenderIdentityCodeDisplay'>
+                                      <xsl:with-param name='genderIdentityCode' select='$genderIdentityEntry/ccda:value/@code'/>
+                                      <xsl:with-param name='genderIdentityNullFlavor' select='$genderIdentityEntry/ccda:value/@nullFlavor'/>
+                                    </xsl:call-template>
+                                  </xsl:otherwise>
+                                </xsl:choose>"
+                } ]
+              }
+          }
         </xsl:if>
       ]
       </xsl:if>
@@ -562,16 +617,28 @@
       , "deceasedBoolean": <xsl:value-of select="ccda:patient/sdtc:deceasedInd/@value"/>  
       </xsl:if>
       <xsl:variable name="mappedCode">
-        <xsl:call-template name="mapMaritalStatusCode">
-          <xsl:with-param name="statusCode" select="ccda:patient/ccda:maritalStatusCode/@code"/>
-        </xsl:call-template>
+          <xsl:call-template name="mapMaritalStatusCode">
+              <xsl:with-param name="statusCode">
+                  <xsl:choose>
+                      <xsl:when test="normalize-space(ccda:patient/ccda:maritalStatusCode/@nullFlavor) != ''">
+                          <xsl:value-of select="ccda:patient/ccda:maritalStatusCode/@nullFlavor"/>
+                      </xsl:when>
+                      <xsl:otherwise>
+                          <xsl:value-of select="ccda:patient/ccda:maritalStatusCode/@code"/>
+                      </xsl:otherwise>
+                  </xsl:choose>
+              </xsl:with-param>
+          </xsl:call-template>
       </xsl:variable>
 
       <!-- Output maritalStatus only if mappedCode is non-empty -->
       <xsl:if test="string($mappedCode)">
         , "maritalStatus": {
           "coding": [{
-            "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus",
+            "system": "<xsl:choose>
+                        <xsl:when test="$mappedCode = 'UNK'">http://terminology.hl7.org/CodeSystem/v3-NullFlavor</xsl:when>
+                        <xsl:otherwise>http://terminology.hl7.org/CodeSystem/v3-MaritalStatus</xsl:otherwise>
+                      </xsl:choose>",
             "code": "<xsl:value-of select='$mappedCode'/>",
             "display": "<xsl:call-template name='mapMaritalStatus'>
                           <xsl:with-param name='statusCode' select='ccda:patient/ccda:maritalStatusCode/@code'/>
@@ -1014,14 +1081,9 @@
               </xsl:if>
           ],
         </xsl:if>
-        <xsl:variable name="orgNameRaw">
-          <xsl:choose>
-            <xsl:when test="$organizationName"><xsl:value-of select="$organizationName"/></xsl:when>
-            <xsl:otherwise><xsl:value-of select="ccda:assignedAuthor/ccda:representedOrganization/ccda:name"/></xsl:otherwise>
-          </xsl:choose>
-        </xsl:variable>
+
         "name": "<xsl:call-template name="string-trim">
-                    <xsl:with-param name="text" select="$orgNameRaw"/>
+                    <xsl:with-param name="text" select="$organizationName"/>
                   </xsl:call-template>"
 
         <xsl:if test="ccda:assignedAuthor/ccda:representedOrganization/ccda:telecom[not(@nullFlavor)]">
@@ -1075,7 +1137,7 @@
   </xsl:template>
 
   <!-- Sexual orientation Observation Template -->
-  <xsl:template name="SexualOrientation" match="/ccda:ClinicalDocument/ccda:component/ccda:structuredBody/ccda:component/ccda:section[@ID='sexualOrientation']/ccda:entry/ccda:observation">
+  <xsl:template name="SexualOrientation" match="/ccda:ClinicalDocument/ccda:component/ccda:structuredBody/ccda:component/ccda:section[@ID='sexualOrientation']/ccda:entry/ccda:observation[ccda:code/@code='76690-7']">
     <xsl:if test="string(ccda:code/@code) = '76690-7'">
 
       <xsl:variable name="resourceUUID">
@@ -1455,8 +1517,8 @@
                             </xsl:for-each>
                           ],
                         </xsl:if>
-                    </xsl:when>    
-                    <xsl:otherwise>
+                    </xsl:when>
+                    <xsl:when test="string(ccda:observation/ccda:value/@code) != 'UNK' and string-length(ccda:observation/ccda:value/@code) > 0">
                         "valueCodeableConcept" : {
                           "coding": [{
                             "system": "http://loinc.org",
@@ -1472,7 +1534,7 @@
                             </xsl:when>
                           </xsl:choose>
                         },
-                    </xsl:otherwise>
+                    </xsl:when>
                   </xsl:choose>
                   "subject": {
                     "reference": "Patient/<xsl:value-of select='$patientResourceId'/>",

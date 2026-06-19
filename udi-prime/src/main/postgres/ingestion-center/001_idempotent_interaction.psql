@@ -1218,15 +1218,15 @@ CREATE OR REPLACE VIEW techbd_udi_ingress.interaction_user_details
 AS SELECT created_at,
     hub_interaction_id,
     uri,
-    sat_interaction_user_id,
+    sat_interaction_ui_user_id,
     user_id,
     user_name,
-    user_session,
     user_session_hash,
     user_role,
     client_ip_address,
     user_agent
-   FROM techbd_udi_ingress.sat_interaction_user sai;
+   FROM techbd_udi_ingress.sat_interaction_ui_user sai
+   WHERE user_id <> 'N/A'::text;
 
 
 
@@ -1243,12 +1243,11 @@ CREATE OR REPLACE VIEW techbd_udi_ingress.interaction_user_list
 AS SELECT min(created_at) AS created_at,
     min(user_id) AS user_id,
     min(user_name) AS user_name,
-    min(user_role) AS user_role,
-    user_session,
+    min(user_role) AS user_role,    
     user_session_hash
    FROM techbd_udi_ingress.interaction_user_details
-  WHERE user_session IS NOT NULL
-  GROUP BY user_session, user_session_hash;
+  WHERE user_session_hash IS NOT NULL
+  GROUP BY user_session_hash;
 
 /*******************************************************************************************************************************
 Procedure to handle the insertion or update of FHIR interaction data, managing default values and error handling.
@@ -1991,7 +1990,8 @@ BEGIN
     FOR v_current_rule IN 
         SELECT json_path, action, reject_json, modify_json, condition, priority, "namespace" 
         FROM techbd_udi_ingress.json_action_rule 
-        WHERE (namespace = process_json_action_rules.rule_namespace OR process_json_action_rules.rule_namespace IS NULL)
+        WHERE (namespace = process_json_action_rules.rule_namespace OR process_json_action_rules.rule_namespace IS NULL) 
+        AND COALESCE(is_deleted, FALSE) = FALSE
         ORDER BY priority DESC -- Apply rules in order of priority
     LOOP
 		 -- Check if the json_path starts with '$.'
@@ -3884,7 +3884,7 @@ RETURNS TABLE (
     qe_total_submissions BIGINT,
     techbd_processed BIGINT,
     shinny_datalake_submissions BIGINT,
-    shinny_datalake_submissions_failed BIGINT,
+  --  shinny_datalake_submissions_failed BIGINT,
     valid_bundles BIGINT,
     recently_created_at TIMESTAMPTZ
 ) AS $$
@@ -3949,7 +3949,7 @@ BEGIN
 			COUNT(*) FILTER (WHERE sihr.to_state = 'COMPLETE') AS shinny_datalake_submissions,
 			COUNT(*) FILTER (WHERE sihr.nature = 'Forward HTTP Request') AS valid_bundles_forwarded,
 			COUNT(*) FILTER (WHERE sihr.to_state = 'COMPLETE') AS valid_bundles_completed,
-			COUNT(*) FILTER (WHERE sihr.nature = 'Forwarded HTTP Response Error' AND sihr.replay_status IS DISTINCT FROM 'True') AS valid_bundles_with_fail_response,
+		--	COUNT(*) FILTER (WHERE sihr.nature = 'Forwarded HTTP Response Error' AND sihr.replay_status IS DISTINCT FROM 'True') AS valid_bundles_with_fail_response,
 			COUNT(*) FILTER (WHERE sihr.nature = 'techByDesignDisposition' AND sihr.techbd_disposition_action = 'discard') AS invalid_bundles,
 			MAX(sihr.created_at) AS recently_created_at
 		FROM per_interaction pi
@@ -3963,7 +3963,7 @@ BEGIN
 		ia.qe_total_submissions,
 		(ia.qe_total_submissions - ia.missing_steps_total) AS techbd_processed,
 		rl.shinny_datalake_submissions,
-		(rl.valid_bundles_forwarded - rl.shinny_datalake_submissions) AS shinny_datalake_submissions_failed,
+		--(rl.valid_bundles_forwarded - rl.shinny_datalake_submissions) AS shinny_datalake_submissions_failed,
 		(ia.qe_total_submissions - ia.missing_steps_total - rl.invalid_bundles) AS valid_bundles,
 		rl.recently_created_at    
 	FROM interaction_agg ia
@@ -6888,27 +6888,13 @@ DECLARE
 	v_elaboration_steps_text 	TEXT[]	:= ARRAY[]::text[]; 
     v_elaboration_steps_jsonb 	JSONB 	:= '[]'::jsonb;
     v_user_id 					TEXT  	:= COALESCE(p_user_id, v_created_by);	
-	v_additional_details		JSONB 	:= jsonb_build_object(
-										    'request', jsonb_build_object(
-										        'User-Agent', p_user_agent,
-										        'remoteAddr', p_client_ip_address,
-										        'X-Observability-Metric-Interaction-Start-Time', p_intr_start_time,
-										        'X-Observability-Metric-Interaction-Finish-Time', p_intr_finish_time
-										    ),
-											'version', p_techbd_version_number,
-											'tenant_id_denorm', v_tenant_id_denorm
-										);
+
+	v_intr_start_time   timestamp with time zone;
+    v_intr_finish_time  timestamp with time zone;
+    v_user_agent        TEXT;
+    v_client_ip_address TEXT;
    
 BEGIN 
-	/* This function is designed to handle the registration and upserting of HTTP interaction requests into user anf http interaction tables in the 
-     * techbd_udi_ingress schema. It first attempts to insert a record into the hub_interaction table and handles unique constraint violations 
-     * based on the hub_upsert_behavior flag. It then inserts data into the sat_interaction_http_request table, capturing details such as 
-     * payload, state transitions, and user information. In case of any error, it logs detailed exception information using the 
-     * register_issue function. The function returns a JSONB object, representing either the inserted data or a processed result.
-     * origin : http/sftp
-     * source_type : fhir/hl7/csv/ccda
-     */
-	
 	v_elaboration_steps_text := array_append(v_elaboration_steps_text, '0: In register_user_interaction function');  
 	
 	IF p_interaction_id IS NULL OR trim(p_interaction_id) = '' THEN
@@ -6984,38 +6970,51 @@ BEGIN
 
 		IF NOT v_return_status THEN
 		    -- Attempt to insert into sat_interaction_http_request
-		    BEGIN		  
-			    -- The insertion to sat_interaction_http_request table needs only once. Need to be corrected later.
-		        INSERT INTO techbd_udi_ingress.sat_interaction_http_request (
-		            sat_interaction_http_request_id, hub_interaction_id, nature, content_type, payload, payload_text, from_state, 
-		            to_state, state_transition_reason, elaboration, created_at, created_by, provenance, nature_denorm, tenant_id_denorm, request_source, techbd_version_number, tenant_name, tenant_id
-		        )
-		        VALUES (
-		            gen_random_uuid()::text, p_interaction_id, p_nature, p_content_type, p_payload, p_payload_text, p_from_state, p_to_state, 
-		            p_state_transition_reason, p_elaboration, v_created_at, v_created_by, v_provenance, v_nature_denorm, v_tenant_id_denorm, p_request_source, p_techbd_version_number, v_tenant_id_denorm, v_tenant_id
-		        );
-
-		        v_elaboration_steps_text := array_append(v_elaboration_steps_text, '3: Inserted into sat_interaction_http_request');
-		
-		       	--1) Call the function with the defined parameters to upsert user info
+		    BEGIN
+		       	--1. Call the function with the defined parameters to upsert user info
 		       	IF(v_nature_denorm = 'org.techbd.service.http.Interactions$RequestResponseEncountered' AND trim(p_interaction_key) NOT IN ('/Hl7/v2', '/Hl7/v2/', '/flatfile/csv/Bundle', '/flatfile/csv/Bundle/', '/flatfile/csv/Bundle/$validate', '/flatfile/csv/Bundle/$validate/', '/ccda/Bundle', '/ccda/Bundle/', '/ccda/Bundle/$validate', '/ccda/Bundle/$validate/', '/hl7v2/Bundle', '/hl7v2/Bundle/','/hl7v2/Bundle/$validate', '/hl7v2/Bundle/$validate/')) THEN     		       	
-					PERFORM techbd_udi_ingress.sat_interaction_user_upserted(
-				        p_hub_interaction_id 			=> p_interaction_id,
-				        p_hub_interaction_key			=> p_interaction_key, 
-			            p_nature						=> v_nature_denorm,
-				        p_payload						=> p_payload, 
-				        p_user_id						=> p_user_id, 
-				        p_user_name					=> p_user_name, 
-				        p_user_session				=> p_user_session, 
-				        p_user_role					=> p_user_role,
-				        p_tenant_id					=> v_tenant_id,
-				        p_elaboration					=> p_elaboration,
-				        p_created_at 					=> v_created_at,
-				        p_created_by 					=> v_created_by,
-				        p_provenance 					=> v_provenance,
-						p_additional_details		=> v_additional_details
-			       	); 
-			      	v_elaboration_steps_text := array_append(v_elaboration_steps_text, '4: Inserted into user info');
+                    
+					SELECT
+					    (
+					        SELECT h->>'value'
+					        FROM jsonb_array_elements(
+					            COALESCE(
+					                p_payload->'response'->'headers',
+					                '[]'::jsonb
+					            )
+					        ) h
+					        WHERE h->>'name' = 'X-Observability-Metric-Interaction-Start-Time'
+					    ) AS interaction_start_time,
+					
+					    (
+					        SELECT h->>'value'
+					        FROM jsonb_array_elements(
+					            COALESCE(
+					                p_payload->'response'->'headers',
+					                '[]'::jsonb
+					            )
+					        ) h
+					        WHERE h->>'name' = 'X-Observability-Metric-Interaction-Finish-Time'
+					    ) AS interaction_finish_time,
+					
+					    p_payload->'request'->>'userAgent' AS user_agent,
+					    p_payload->'request'->>'clientIpAddress' AS client_ip_address
+					
+					INTO v_intr_start_time, v_intr_finish_time, v_user_agent, v_client_ip_address;
+
+					
+					INSERT INTO techbd_udi_ingress.sat_interaction_ui_user (
+                        sat_interaction_ui_user_id, hub_interaction_id, uri, nature, tenant_id, user_id, user_name, user_session, user_session_hash, 
+                        user_role, client_ip_address, user_agent, elaboration, created_at, created_by, provenance, 
+                        interaction_start_time, interaction_end_time, techbd_version_number, tenant_name
+                    )
+                    VALUES (
+                        gen_random_uuid()::text, p_interaction_id, p_interaction_key, v_nature_denorm, v_tenant_id, p_user_id, p_user_name, p_user_session, md5(p_user_session), 
+                        p_user_role, COALESCE(p_client_ip_address, v_client_ip_address), COALESCE(p_user_agent, v_user_agent), p_elaboration, v_created_at, v_created_by, v_provenance,
+                        COALESCE(p_intr_start_time, v_intr_start_time), COALESCE(p_intr_finish_time, v_intr_finish_time), p_techbd_version_number, v_tenant_id_denorm
+                    );
+		
+			      	v_elaboration_steps_text := array_append(v_elaboration_steps_text, '4: Inserted into sat_interaction_ui_user');
 					
 					v_return := jsonb_build_object('interaction_id', p_interaction_id);
 				ELSE
@@ -7471,7 +7470,6 @@ RETURNS TABLE (
     user_agent TEXT,
     client_ip_address TEXT,
     content_type TEXT,
-    elaboration JSONB, 
     request_created_at TIMESTAMP WITH TIME ZONE,
     request_created_by TEXT,
     request_provenance TEXT 
@@ -7484,17 +7482,16 @@ BEGIN
             user_req.created_at AS interaction_created_at,
             user_req.created_by AS interaction_created_by,
             user_req.provenance AS interaction_provenance,
-            user_req.sat_interaction_user_id AS sat_interaction_http_request_id,
+            user_req.sat_interaction_ui_user_id AS sat_interaction_http_request_id,
             user_req.nature, 
             user_req.tenant_name AS tenant_id,
             user_req.user_agent,
             user_req.client_ip_address,
             'application/json'::text AS content_type,
-            user_req.elaboration, 
             user_req.created_at AS request_created_at,
             user_req.created_by AS request_created_by,
             user_req.provenance AS request_provenance
-        FROM techbd_udi_ingress.sat_interaction_user user_req
+        FROM techbd_udi_ingress.sat_interaction_ui_user user_req
         WHERE user_req.uri NOT ILIKE '%/Bundle%' 
           AND user_req.created_at >= TO_DATE(start_date, 'MM-DD-YYYY')
           AND user_req.created_at <  TO_DATE(end_date, 'MM-DD-YYYY') + INTERVAL '1 day';
@@ -8863,9 +8860,9 @@ BEGIN
             req.interaction_start_time AS start_time,
             req.interaction_end_time AS finish_time,
             EXTRACT(EPOCH FROM (req.interaction_end_time - req.interaction_start_time)) * 1000 AS duration_millisecs,
-            req.sat_interaction_user_id AS interaction_http_request_id
+            req.sat_interaction_ui_user_id AS interaction_http_request_id
         FROM 
-            techbd_udi_ingress.sat_interaction_user req
+            techbd_udi_ingress.sat_interaction_ui_user req
             CROSS JOIN date_range dr
         WHERE 
             req.uri NOT ILIKE '%/Bundle%'
@@ -9216,3 +9213,25 @@ AS $function$
         htt_req.created_at DESC;
 
 $function$;
+
+DROP VIEW IF EXISTS techbd_udi_ingress.active_json_action_rule  CASCADE;
+CREATE OR REPLACE VIEW techbd_udi_ingress.active_json_action_rule  AS  
+    SELECT 
+        jar.action_rule_id,
+        jar.namespace,
+        jar.json_path,
+        jar.action,
+        jar.condition,
+        jar.reject_json,
+        jar.modify_json,
+        jar.priority,
+        jar.updated_at,
+        jar.updated_by,
+        jar.last_applied_at,
+        jar.description,
+        jar.created_at,       
+        jar.is_deleted
+    FROM 
+        techbd_udi_ingress.json_action_rule jar
+    WHERE
+        COALESCE(jar.is_deleted, FALSE) = FALSE; 
