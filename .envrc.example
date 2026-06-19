@@ -42,7 +42,14 @@ export TECHBD_OPEN_OBSERVE_URL=http://10.10.11.248:5080
 export TECHBD_OPEN_OBSERVE_PASSWORD=Y2l0cnVzQGNpdHJ1cy5jb206Y2l0cnVz
 export TECHBD_OPEN_OBSERVE_STREAM_NAME=local
 
+## Host header allow-list, checked verbatim against the incoming Host header (InteractionsFilter).
+## Entries must NOT include a scheme — the Host header never has one.
 export TECHBD_ALLOWED_HOSTS=localhost:8080
+
+## CORS allow-list (SecurityConfig#corsFilter), comma-separated.
+## Browser Origin headers always include a scheme, so entries should too;
+## a bare hostname is assumed to be https://, which will NOT match an http:// origin.
+export TECHBD_ALLOWED_ORIGINS=http://localhost:8080
 
 export PYTHON_SCRIPT_PATH=../
 export ORG_TECHBD_CSV_ASYNC_EXECUTOR_CORE_POOL_SIZE=20

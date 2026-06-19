@@ -56,8 +56,8 @@ public class SecurityConfig {
     @Value("${AUTH_PROVIDER:github}")
     private String authProvider;
 
-    @Value("${TECHBD_ALLOWED_HOSTS:}")
-    private String allowedHosts;
+    @Value("${TECHBD_ALLOWED_ORIGINS:}")
+    private String allowedOrigins;
 
     @Bean
     public SecurityFilterChain statelessSecurityFilterChain(final HttpSecurity http) throws Exception {
@@ -126,28 +126,32 @@ public class SecurityConfig {
     @Bean
     public CorsFilter corsFilter() {
         // Strict origin whitelist — never reflect arbitrary user-supplied origins.
-        // Origins are derived from the configured API/UI base URLs and TECHBD_ALLOWED_HOSTS.
-        List<String> allowedOrigins = new ArrayList<>();
+        // Origins are derived from the configured API/UI base URLs and TECHBD_ALLOWED_ORIGINS.
+        // Note: TECHBD_ALLOWED_HOSTS is a separate setting used only for Host-header
+        // validation in InteractionsFilter; do not conflate the two.
+        List<String> allowedOriginsList = new ArrayList<>();
         if (apiUrl != null && !apiUrl.isBlank()) {
-            allowedOrigins.add(apiUrl.stripTrailing().replaceAll("/+$", ""));
+            allowedOriginsList.add(apiUrl.stripTrailing().replaceAll("/+$", ""));
         }
         if (uiUrl != null && !uiUrl.isBlank()) {
-            allowedOrigins.add(uiUrl.stripTrailing().replaceAll("/+$", ""));
+            allowedOriginsList.add(uiUrl.stripTrailing().replaceAll("/+$", ""));
         }
-        if (allowedHosts != null && !allowedHosts.isBlank()) {
-            for (String host : allowedHosts.split(",")) {
-                String trimmed = host.strip();
+        if (allowedOrigins != null && !allowedOrigins.isBlank()) {
+            for (String origin : allowedOrigins.split(",")) {
+                String trimmed = origin.strip();
                 if (!trimmed.isEmpty()) {
-                    // Accept both bare hostnames and full origin URLs
-                    String origin = trimmed.startsWith("http") ? trimmed : "https://" + trimmed;
-                    allowedOrigins.add(origin.replaceAll("/+$", ""));
+                    // Browser Origin headers always include a scheme, so entries should too.
+                    // A bare hostname is assumed https:// — it will NOT match an http:// origin
+                    // (e.g. local dev), so prefer full origin URLs in TECHBD_ALLOWED_ORIGINS.
+                    String normalized = trimmed.startsWith("http") ? trimmed : "https://" + trimmed;
+                    allowedOriginsList.add(normalized.replaceAll("/+$", ""));
                 }
             }
         }
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(allowedOrigins.isEmpty() ? null : allowedOrigins);
+        config.setAllowedOrigins(allowedOriginsList.isEmpty() ? null : allowedOriginsList);
         config.setAllowedMethods(Constant.CORS_ALLOWED_METHODS);
         config.setAllowedHeaders(Constant.CORS_ALLOWED_HEADERS);
         // Expose headers for session time-out redirection at the UI side (AGGrid etc)
