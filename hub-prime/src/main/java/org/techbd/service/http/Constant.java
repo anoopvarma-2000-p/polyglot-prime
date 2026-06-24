@@ -42,8 +42,10 @@ public class Constant {
 
     // Newly added custom headers must be included here in this list also.
     public static final List<String> CORS_ALLOWED_HEADERS = List.of(
-            "Authorization", "Content-Type", "Accept", "Origin",
-            "X-Requested-With", "X-TechBD-FHIR-Validation-Strategy",
+            "Authorization", "Content-Type", "Accept", "Origin", "User-Agent",
+            "Content-Disposition",
+            "X-Requested-With",
+            "X-TechBD-FHIR-Validation-Strategy",
             "X-TechBD-Tenant-ID",
             "X-SHIN-NY-IG-Version",
             "X-TechBD-Source-Type",
@@ -71,7 +73,10 @@ public class Constant {
             "X-TechBD-Part2",
             "X-TechBD-OMH",
             "X-TechBD-OPWDD",
-            "X-TechBD-Organization-Name");
+            "X-TechBD-Organization-Name",
+            "X-TechBD-REMOTE-IP",
+            "X-TechBD-Source",
+            "x-api-key");
 
     public static final List<String> CORS_EXPOSED_HEADERS = List.of("Location");
 
