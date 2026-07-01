@@ -84,7 +84,7 @@
             "name": "FACILITY_ZIP",
             "type": "string",
             "description": "Bundle.entry.resource.where(resourceType ='Organization').address.postalCode & Bundle.entry.resource.where(resourceType ='Organization').address.text",
-            "constraints": { "pattern": "^\\d{5}(-?\\d{4})?$" }
+            "constraints": { "pattern": "^\\d{5}(-\\d{4})?$" }
           },
           {
             "name": "FACILITY_COUNTY",
@@ -464,7 +464,7 @@
             "description": "Bundle.entry.resource.where(resourceType ='Observation' and hasMember.exists()).code.coding.code",
             "constraints": {
               "required": true,
-             "pattern": "^(?i:96777-8|97023-6|nysahchrsn|nys-ahc-hrsn)$"
+             "pattern": "^(?i:96777-8|97023-6|nysahchrsn|nys-ahc-hrsn|93025-5)$"
             }
           },
           {
@@ -778,7 +778,7 @@
             "description": "Bundle.entry.resource.where(resourceType ='Patient').address.postalCode",
             "constraints": {
               "required": true,
-              "pattern": "^\\d{5}(-?\\d{4})?$"
+              "pattern": "^\\d{5}(-\\d{4})?$"
             }
           },
           {
