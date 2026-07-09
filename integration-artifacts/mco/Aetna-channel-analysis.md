@@ -27,20 +27,20 @@ This is one of several near-identical per-MCO channels (one per managed care org
 
 ```
                          ┌───────────────────────────────────────────────────┐
-                         │  SFTP inbound: /lza-prod-esmf/.../mirth_inbound    │
-                         │  File Reader source, polls every 60s               │
+                         │  SFTP inbound: /lza-prod-esmf/.../mirth_inbound   │
+                         │  File Reader source, polls every 60s              │
                          └───────────────────────────┬───────────────────────┘
-                                                      │  batched by line-count (chunkSize)
-                                                      ▼
+                                                     │  batched by line-count (chunkSize)
+                                                     ▼
                     ┌──────────────────────────────────────────────────────────┐
                     │ Source Transformer (JavaScript)                          │
                     │  • filename convention + resubmission detection          │
                     │  • duplicate/already-processed checks against Postgres   │
                     │  • per-record validation (~50 rules, EC0xx error codes)  │
-                    │  • builds validData[] / errorMessages[] / status          │
+                    │  • builds validData[] / errorMessages[] / status         │
                     │  • dynamically prunes destinationSet based on outcome    │
                     └───────────────────────────┬──────────────────────────────┘
-                                                 ▼
+                                                ▼
         ┌─────────────────────────────────────────────────────────────────────────────┐
         │ Destinations (execution order, all "wait for previous"):                    │
         │                                                                             │
@@ -49,20 +49,20 @@ This is one of several near-identical per-MCO channels (one per managed care org
         │  4  Success Data      → writes valid rows to mirth_processed/Success_<file> │
         │  5  Error Data        → writes invalid rows + EOF marker to Error_<file>    │
         │  6  Stream file to SFTP → JSch SFTP push of Success file to NYeC data lake, │
-        │       plus internal archive copies; branches on error-threshold %          │
+        │       plus internal archive copies; branches on error-threshold %           │
         │  3  DB Calls          → finalizes mco_records/mco_record_details status     │
         │       (FULLY_PROCESSED / PARTIALLY_PROCESSED / ERRORED)                     │
         │  7  Send Rejection Receipt File → FileRejected_<file> to Aetna outbound     │
-        │  8  Send Success Receipt        → Success_<file> receipt to Aetna outbound │
-        │ 10  File Rejection Alert  (email)                                          │
-        │ 11  Success File Alert   (email)                                          │
-        │ 12  File Error Alert     (email, partial success)                         │
-        │ 13  Archive Success Receipt → archive/mco-aetna/prod/mco_success           │
-        │ 14  Archive Rejection Receipt → archive/mco-aetna/prod/mco_error           │
-        │ 16  File rejection in DB → updates mco_records/mco_record_details status  │
-        │  9  Clear Global Map  → resets globalChannelMap once batchComplete        │
-        │ 15  Destination 1 (SFTP File Writer, DISABLED) → legacy/backup direct     │
-        │       SFTP push to nyec-transfer.nyehealth.org, superseded by dest 6      │
+        │  8  Send Success Receipt        → Success_<file> receipt to Aetna outbound  │
+        │ 10  File Rejection Alert  (email)                                           │
+        │ 11  Success File Alert   (email)                                            │
+        │ 12  File Error Alert     (email, partial success)                           │
+        │ 13  Archive Success Receipt → archive/mco-aetna/prod/mco_success            │
+        │ 14  Archive Rejection Receipt → archive/mco-aetna/prod/mco_error            │
+        │ 16  File rejection in DB → updates mco_records/mco_record_details status    │
+        │  9  Clear Global Map  → resets globalChannelMap once batchComplete          │
+        │ 15  Destination 1 (SFTP File Writer, DISABLED) → legacy/backup direct       │
+        │       SFTP push to nyec-transfer.nyehealth.org, superseded by dest 6        │
         └─────────────────────────────────────────────────────────────────────────────┘
 ```
 

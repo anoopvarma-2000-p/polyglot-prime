@@ -34,20 +34,20 @@ Polls `/lza-prod-esmf/internal/mco-anthem/prod/mirth_inbound` for files named `A
 
 ```
                          ┌───────────────────────────────────────────────────┐
-                         │  SFTP inbound: /lza-prod-esmf/.../mco-anthem/      │
-                         │  mirth_inbound — File Reader source, polls 60s     │
+                         │  SFTP inbound: /lza-prod-esmf/.../mco-anthem/     │
+                         │  mirth_inbound — File Reader source, polls 60s    │
                          └───────────────────────────┬───────────────────────┘
-                                                      │  batched by line-count (chunkSize)
-                                                      ▼
+                                                     │  batched by line-count (chunkSize)
+                                                     ▼
                     ┌──────────────────────────────────────────────────────────┐
                     │ Source Transformer (JavaScript) — identical to Aetna:    │
                     │  • filename convention + resubmission detection          │
                     │  • duplicate/already-processed checks against Postgres   │
                     │  • per-record validation (~50 rules, EC0xx error codes)  │
-                    │  • builds validData[] / errorMessages[] / status          │
+                    │  • builds validData[] / errorMessages[] / status         │
                     │  • dynamically prunes destinationSet based on outcome    │
                     └───────────────────────────┬──────────────────────────────┘
-                                                 ▼
+                                                ▼
         Destinations (execution order, all "wait for previous") — see the
         destination table in Aetna-channel-analysis.md §4; behavior, filters,
         and SQL are identical, only mco_code='ANT' / mco_sftp_folder=
