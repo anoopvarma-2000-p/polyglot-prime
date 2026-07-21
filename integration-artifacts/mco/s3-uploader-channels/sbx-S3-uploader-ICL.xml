@@ -1,7 +1,7 @@
 <channel version="26.3.1">
-  <id>d981cee1-092a-46da-a0d4-ec2db84ee081</id>
+  <id>1fffb1a7-bc4f-4aec-82b9-cb628a18a8b0</id>
   <nextMetaDataId>2</nextMetaDataId>
-  <name>sbx-S3-uploader</name>
+  <name>sbx-S3-uploader-ICL</name>
   <description></description>
   <revision>4</revision>
   <sourceConnector version="26.3.1">
@@ -51,7 +51,7 @@
         <queueBufferSize>1000</queueBufferSize>
       </sourceConnectorProperties>
       <scheme>FILE</scheme>
-      <host>d:/upload2s3</host>
+      <host>D:/mco-test/upload2s3-ICL</host>
       <fileFilter>*</fileFilter>
       <regex>false</regex>
       <directoryRecursion>false</directoryRecursion>
@@ -64,11 +64,11 @@
       <passive>true</passive>
       <validateConnection>true</validateConnection>
       <afterProcessingAction>MOVE</afterProcessingAction>
-      <moveToDirectory>D:/upload2s3-finished</moveToDirectory>
+      <moveToDirectory>D:/mco-test/upload2s3-ICL-finished</moveToDirectory>
       <moveToFileName>[Done]-${originalFilename}</moveToFileName>
       <errorReadingAction>MOVE</errorReadingAction>
       <errorResponseAction>MOVE</errorResponseAction>
-      <errorMoveToDirectory>D:/upload2s3-finished</errorMoveToDirectory>
+      <errorMoveToDirectory>D:/mco-test/upload2s3-ICL-finished</errorMoveToDirectory>
       <errorMoveToFileName>[err]-${originalFilename}</errorMoveToFileName>
       <checkFileAge>true</checkFileAge>
       <fileAge>1000</fileAge>
@@ -138,7 +138,7 @@
           <region>us-east-1</region>
           <customHeaders class="linked-hash-map"/>
         </schemeProperties>
-        <host>txd-sbx-mco-sftp-inbound/bridgelink-inbound/AET</host>
+        <host>txd-sbx-mco-sftp-inbound/bridgelink-inbound/ICL</host>
         <outputPattern>${originalFilename}</outputPattern>
         <anonymous>false</anonymous>
         <username>${s3AccessKeyId}</username>
