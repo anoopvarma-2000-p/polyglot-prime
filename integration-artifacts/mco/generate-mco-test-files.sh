@@ -95,6 +95,28 @@ if [ "${#TEMPLATE_FILES[@]}" -eq 0 ]; then
     exit 1
 fi
 
+# Resubmission templates: RS_AMI_MDESMF_<original-ts>_<resubmission-ts>.txt,
+# each one a corrected resubmission of the errored rows in the ORIGINAL
+# template whose timestamp matches <original-ts>. To clone these for another
+# MCO we look up which index that original template holds in TEMPLATE_FILES
+# and reuse this run's freshly-generated timestamp for that same index, so
+# the RS_ filename's embedded original-file reference stays consistent with
+# the sibling original file this run also generates.
+mapfile -t RS_TEMPLATE_FILES < <(find "$TEMPLATE_DIR" -maxdepth 1 -name "RS_${TEMPLATE_PREFIX}_MDESMF_*_*.txt" | sort)
+
+declare -A ORIG_TS_TO_INDEX
+for idx in "${!TEMPLATE_FILES[@]}"; do
+    base=$(basename "${TEMPLATE_FILES[$idx]}")
+    if [[ "$base" =~ ^${TEMPLATE_PREFIX}_MDESMF_([0-9]{14})\.txt$ ]]; then
+        ORIG_TS_TO_INDEX["${BASH_REMATCH[1]}"]=$idx
+    fi
+done
+
+ts_to_epoch() {
+    local ts="$1"
+    date -d "${ts:0:4}-${ts:4:2}-${ts:6:2} ${ts:8:2}:${ts:10:2}:${ts:12:2}" +%s
+}
+
 # Reporting-month sanity check: EC092/EC093 validate MBR_CONT_PLAN_ENROLL_DT /
 # MBR_PROS_DISENROLL_DT against a reporting-month window derived from
 # config-map-export-example.properties (startDate=20 / endDate=4). The
@@ -133,6 +155,21 @@ if $UPLOAD_MODE; then
             CREATED+=("$out_file")
             i=$((i + 1))
         done
+
+        for rs_template_file in "${RS_TEMPLATE_FILES[@]}"; do
+            rs_base=$(basename "$rs_template_file")
+            [[ "$rs_base" =~ ^RS_${TEMPLATE_PREFIX}_MDESMF_([0-9]{14})_([0-9]{14})\.txt$ ]] || continue
+            orig_ts_template="${BASH_REMATCH[1]}"
+            resub_ts_template="${BASH_REMATCH[2]}"
+            idx="${ORIG_TS_TO_INDEX[$orig_ts_template]:-}"
+            [ -n "$idx" ] || continue
+            new_orig_ts=$(date -d "@$((BASE_EPOCH + idx * INTERVAL))" +%Y%m%d%H%M%S)
+            gap=$(( $(ts_to_epoch "$resub_ts_template") - $(ts_to_epoch "$orig_ts_template") ))
+            new_resub_ts=$(date -d "@$(( $(ts_to_epoch "$new_orig_ts") + gap ))" +%Y%m%d%H%M%S)
+            out_file="$code_in_dir/RS_${CODE}_MDESMF_${new_orig_ts}_${new_resub_ts}.txt"
+            cp "$rs_template_file" "$out_file"
+            CREATED+=("$out_file")
+        done
     done
 
     echo "Generated ${#CREATED[@]} test file(s) across $(wc -w <<< "$KNOWN_CODES") MCO codes, copied into"
@@ -169,6 +206,21 @@ else
         cp "$template_file" "$out_file"
         CREATED+=("$out_file")
         i=$((i + 1))
+    done
+
+    for rs_template_file in "${RS_TEMPLATE_FILES[@]}"; do
+        rs_base=$(basename "$rs_template_file")
+        [[ "$rs_base" =~ ^RS_${TEMPLATE_PREFIX}_MDESMF_([0-9]{14})_([0-9]{14})\.txt$ ]] || continue
+        orig_ts_template="${BASH_REMATCH[1]}"
+        resub_ts_template="${BASH_REMATCH[2]}"
+        idx="${ORIG_TS_TO_INDEX[$orig_ts_template]:-}"
+        [ -n "$idx" ] || continue
+        new_orig_ts=$(date -d "@$((BASE_EPOCH + idx * INTERVAL))" +%Y%m%d%H%M%S)
+        gap=$(( $(ts_to_epoch "$resub_ts_template") - $(ts_to_epoch "$orig_ts_template") ))
+        new_resub_ts=$(date -d "@$(( $(ts_to_epoch "$new_orig_ts") + gap ))" +%Y%m%d%H%M%S)
+        out_file="$OUT_DIR/RS_${MCO_CODE}_MDESMF_${new_orig_ts}_${new_resub_ts}.txt"
+        cp "$rs_template_file" "$out_file"
+        CREATED+=("$out_file")
     done
 
     echo "Generated ${#CREATED[@]} test files for MCO code '$MCO_CODE' in $OUT_DIR:"

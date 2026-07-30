@@ -56,3 +56,43 @@ file is under the threshold and should show `PARTIALLY_PROCESSED`.
 
 All files were verified with a local re-implementation of the channel's validation rules
 before being committed; see the row numbers above for the exact expected failures per file.
+
+## Resubmission files (`RS_` prefix)
+
+Per §5 (Resubmission Procedures) of the RRHIO ESMF File Transmission Specification
+(`1.MCO.Phase.1.-.RRHIO.ESMF.File.Transmission.Specification.Document_v7.1.docx`), a
+resubmission must be named `RS_{OriginalFileName}_{YYYYMMDDhhmmss}.txt` and must contain
+**the same number of records as the error rows** found in the original file's error
+response — no more, no fewer, even if some errors are left uncorrected — or the whole
+resubmission is rejected (`EC085`). Each file below pairs with one of the all-error/mixed/
+low-error-rate originals above and carries exactly its error-row count, corrected.
+
+Reporting month used when validating these files: **August 2026** (2026-08-01 to
+2026-08-31), computed the same way as above but applied to 2026-07-30 (`calculateReportingMonth()`
+in `Aetna.xml` rolls the month forward once `date >= startDate`). A few rows whose
+`MBR_PROS_DISENROLL_DT` was valid under the July window (e.g. the "Brooksbank"/"Okafor"
+template rows, dated `20260715`) needed bumping forward in addition to the originally
+-injected error, since `20260715` no longer satisfies "not before the reporting month
+start" once that start rolls to `2026-08-01`. This is the same moving-target caveat noted
+in `generate-mco-test-files.md` for the original files — re-verify against
+`config-map-export-example.properties` and today's date before trusting these as
+all-success if much time has passed since generation.
+
+| Resubmission file | Rows | Pairs with (original) | Corrects |
+|---|---|---|---|
+| RS_AET_MDESMF_20260710100000_20260711090000.txt | 10 | AET_MDESMF_20260710100000.txt | All 10 `MBR_DOB` future-date errors (`EC094`) restored to each member's real past DOB; row 6 (Brooksbank) disenroll date also bumped past 2026-08-01 |
+| RS_AET_MDESMF_20260710101500_20260711091500.txt | 12 | AET_MDESMF_20260710101500.txt | All 12 `MBR_PROS_DISENROLL_DT = 19700823` errors (`EC092`) bumped to `20270823` |
+| RS_AET_MDESMF_20260710103000_20260711093000.txt | 13 | AET_MDESMF_20260710103000.txt | Each row's single injected error fixed in place (county, plan ID x2, LOB_DESC, postal code, flag value + stale disenroll date, MBR_ID x2, phone, PCP_NPI, NULL address, NULL city, empty EPOP_IDD) |
+| RS_AET_MDESMF_20260710110000_20260711100000.txt | 4 | AET_MDESMF_20260710110000.txt | row 4 (future DOB), row 7 (banned PLAN_ID + stale disenroll date), row 10 (bad county), row 13 (stale disenroll date) |
+| RS_AET_MDESMF_20260710111500_20260711101500.txt | 5 | AET_MDESMF_20260710111500.txt | row 3 (bad postal), row 5 (bad LOB_DESC), row 7 (bad flag value + stale disenroll date), row 9 (bad MBR_ID length), row 11 (bad phone) |
+| RS_AET_MDESMF_20260710113000_20260711103000.txt | 4 | AET_MDESMF_20260710113000.txt | row 3 (empty EPOP_IDD), row 6 (future enroll date), row 10 (bad PCP_NPI), row 14 (literal NULL address) |
+| RS_AET_MDESMF_20260710114500_20260711104500.txt | 1 | AET_MDESMF_20260710114500.txt | row 9 (bad flag value) |
+
+All seven were re-validated with a local re-implementation of the channel's field rules
+(county/FIPS list, plan ID, LOB_DESC, phone/PCP formats, Y/N/U flags, and the August-2026
+enroll/disenroll window) and confirmed to produce zero remaining field errors — i.e. each
+is a fully-corrected resubmission that should resolve to `FULLY_PROCESSED` once the count
+and naming checks pass. Byte-identical copies (content is MCO-agnostic; only the MCO code
+in the filename differs, per the shared-validation-logic note above) live in
+`test-files/AMI/` as the canonical templates `generate-mco-test-files.sh` clones for every
+other MCO.

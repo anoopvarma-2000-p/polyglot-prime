@@ -8,6 +8,20 @@ thing that legitimately varies between channels is the filename prefix (`mco_cod
 and the file timestamps — the script exploits that to produce valid test data for
 any MCO without hand-authoring per-MCO content.
 
+Alongside the original (`AMI_MDESMF_*.txt`) templates, `test-files/AMI/` also holds
+seven `RS_AMI_MDESMF_<original-ts>_<resubmission-ts>.txt` resubmission templates —
+one for every original template that has at least one error record (the four
+all-success templates have nothing to resubmit). Each RS template contains exactly
+the errored rows from its paired original, corrected, per §5 (Resubmission
+Procedures) of the RRHIO ESMF spec: the resubmission must carry the *same record
+count* as the original's error response (`EC085`), named `RS_{OriginalFileName}_
+{YYYYMMDDhhmmss}.txt` (`EC002`/`EC008x` otherwise). Single-MCO mode and `-u`/
+`--upload` mode clone these too, rewriting the embedded original-file timestamp to
+match the sibling original file generated in the same run (so the two stay linked)
+and preserving the original template's original→resubmission time gap. `-a`/`--all`
+mode does not include them, since it clones only one file per MCO with nothing to
+pair a resubmission against.
+
 ## Modes
 
 | Mode | Command | What it produces |
