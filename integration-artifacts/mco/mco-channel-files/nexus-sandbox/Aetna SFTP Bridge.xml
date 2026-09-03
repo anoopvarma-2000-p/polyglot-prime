@@ -4,26 +4,26 @@
   <name>Aetna SFTP Bridge</name>
   <description>Version: 0.3.0
 Step 3 (copy to the Aetna landing directory) is done by a native File Writer destination
-(scheme=S3, metaDataId 2, "Copy to Aetna Landing") rather than a raw AWS SDK call from the
+(scheme=S3, metaDataId 2, &quot;Copy to Aetna Landing&quot;) rather than a raw AWS SDK call from the
 source script - AmazonS3ClientBuilder is not reachable from a JavaScript Reader source
-connector's own script on this Bridgelink instance (confirmed via testing), even though it
-works fine inside Aetna.xml's transformer-step scripts.
+connector&apos;s own script on this Bridgelink instance (confirmed via testing), even though it
+works fine inside Aetna.xml&apos;s transformer-step scripts.
 
 The source script delivers the found file by returning it as a RawMessage directly (only
 the first file if more than one is found - the rest wait for later polls), NOT via
-router.routeMessage. Self-routing was tried first, but Mirth's VMRouter cannot resolve a
-channel routing to itself while that same channel's own source poll is still executing -
-confirmed via the server log ("Could not find channel to route to for channel name: [this
-channel's own id]"), logged server-side without throwing a catchable exception back into
+router.routeMessage. Self-routing was tried first, but Mirth&apos;s VMRouter cannot resolve a
+channel routing to itself while that same channel&apos;s own source poll is still executing -
+confirmed via the server log (&quot;Could not find channel to route to for channel name: [this
+channel&apos;s own id]&quot;), logged server-side without throwing a catchable exception back into
 the script, so the file was silently never delivered even though the script logged success.
 
-"Log Delivery" (metaDataId 1) checks the landing-directory write's outcome and sends the
+&quot;Log Delivery&quot; (metaDataId 1) checks the landing-directory write&apos;s outcome and sends the
 step 1-3 error alert if the write itself failed.
-Aetna's inbound SFTP private key (PEM) is pulled from Secrets Manager via
-LookupHelper.get("Config-sensitive", "AETNA_INBOUND_SFTP_PRIVATE_KEY") in the deploy script,
+Aetna&apos;s inbound SFTP private key (PEM) is pulled from Secrets Manager via
+LookupHelper.get(&quot;Config-sensitive&quot;, &quot;AETNA_INBOUND_SFTP_PRIVATE_KEY&quot;) in the deploy script,
 the same mechanism already used for the JDBC/S3 secrets - no key file on disk.
 
-Logs into Aetna's inbound SFTP, scans for new ESMF files, and copies anything found into the
+Logs into Aetna&apos;s inbound SFTP, scans for new ESMF files, and copies anything found into the
 ${s3BucketName}/mco-sftp-aetna/esmf/inbound landing directory (mco-sftp-aetna is a
 hardcoded constant, mcoSftpS3Folder, near the top of the source script), so the normal ESMF
 processing pipeline picks it up unchanged.
@@ -33,7 +33,7 @@ month (mco_data.mco_records). If not, and today falls within the monthly submiss
 (configurationMap startDate/endDate), emails engineering@techbd.org that no Aetna file was found.
 
 If the SFTP login, folder scan, or copy step fails, emails engineering@techbd.org with the error.</description>
-  <revision>1</revision>
+  <revision>40</revision>
   <sourceConnector version="26.6.0">
     <metaDataId>0</metaDataId>
     <name>sourceConnector</name>
@@ -103,13 +103,11 @@ function sendAlertEmail(subject, body) {
         var smtpUsername = configurationMap.get(&apos;smtpUsername&apos;);
         var smtpPassword = configurationMap.get(&apos;smtpPassword&apos;);
         var fromEmail = configurationMap.get(&apos;smtpFromEmail&apos;);
-        var toEmail = 'techbd-support@netspective.com'; //TODO Replace with this email after testing: 'engineering@techbd.org';
+        var toEmail = &apos;anoop-varma@netspective.in&apos;; //TODO Replace with this email after testing: &apos;engineering@techbd.org&apos;;
 
-        // TEMP: mail sending disabled during bug-fix testing (200/day SMTP quota) - uncomment
-        // the two lines below to re-enable once testing is done.
-        // var smtpConn = SMTPConnection(smtpHostname, smtpPort, 0, true, &apos;TLS&apos;, smtpUsername, smtpPassword, fromEmail);
-        // smtpConn.send(toEmail, &apos;&apos;, fromEmail, subject, body, &apos;UTF-8&apos;);
-        logger.info(&apos;Aetna SFTP Bridge: alert email SUPPRESSED (sending disabled) - &apos; + subject);
+        var smtpConn = SMTPConnection(smtpHostname, smtpPort, 0, true, &apos;TLS&apos;, smtpUsername, smtpPassword, fromEmail);
+        smtpConn.send(toEmail, &apos;&apos;, fromEmail, subject, body, &apos;UTF-8&apos;);
+        logger.info(&apos;Aetna SFTP Bridge: alert email sent - &apos; + subject);
     } catch (mailErr) {
         logger.error(&apos;Aetna SFTP Bridge: failed to send alert email - &apos; + mailErr);
     }
@@ -472,7 +470,7 @@ try {
             <script>// Runs right before the native S3 write is attempted, so &quot;starting&quot; is logged
 // even if the write itself then hangs, times out, or fails before any response exists.
 logger.info(&apos;Aetna SFTP Bridge: starting S3 upload - file=&apos; + $(&apos;originalFilename&apos;) + &apos;, target=&apos; + globalMap.get(&apos;s3BucketName&apos;) + &apos;/&apos; + globalMap.get(&apos;mcoSftpS3Folder&apos;) + &apos;/esmf/inbound/&apos; + $(&apos;originalFilename&apos;));
-return message;</script>
+return msg;</script>
           </com.mirth.connect.plugins.javascriptstep.JavaScriptStep>
         </elements>
         <inboundTemplate encoding="base64"></inboundTemplate>
@@ -587,11 +585,9 @@ function sendAlertEmail(subject, body) {
         var fromEmail = configurationMap.get(&apos;smtpFromEmail&apos;);
         var toEmail = &apos;engineering@techbd.org&apos;;
 
-        // TEMP: mail sending disabled during bug-fix testing (200/day SMTP quota) - uncomment
-        // the two lines below to re-enable once testing is done.
-        // var smtpConn = SMTPConnection(smtpHostname, smtpPort, 0, true, &apos;TLS&apos;, smtpUsername, smtpPassword, fromEmail);
-        // smtpConn.send(toEmail, &apos;&apos;, fromEmail, subject, body, &apos;UTF-8&apos;);
-        logger.info(&apos;Aetna SFTP Bridge: alert email SUPPRESSED (sending disabled) - &apos; + subject);
+        var smtpConn = SMTPConnection(smtpHostname, smtpPort, 0, true, &apos;TLS&apos;, smtpUsername, smtpPassword, fromEmail);
+        smtpConn.send(toEmail, &apos;&apos;, fromEmail, subject, body, &apos;UTF-8&apos;);
+        logger.info(&apos;Aetna SFTP Bridge: alert email sent - &apos; + subject);
     } catch (mailErr) {
         logger.error(&apos;Aetna SFTP Bridge: failed to send alert email - &apos; + mailErr);
     }
@@ -695,11 +691,22 @@ globalMap.put(&quot;s3BucketName&quot;, LookupHelper.get(&quot;Config-sensitive&
 
 // Aetna&apos;s inbound SFTP private key (PEM content, not a file path) and its optional
 // passphrase, both pulled from whatever backs the Config-sensitive lookup source
-// (Secrets Manager). Config-sensitive does not accept a blank value, so if the key has
-// no passphrase, set AETNA_INBOUND_SFTP_KEY_PASSPHRASE to the literal string &quot;NONE&quot;
-// rather than leaving it blank - the source script treats that sentinel as no passphrase.
-globalMap.put(&quot;aetnaInboundSftpPrivateKeyPem&quot;, LookupHelper.get(&quot;Config-sensitive&quot;, &quot;AETNA_INBOUND_SFTP_PRIVATE_KEY&quot;));
-globalMap.put(&quot;aetnaInboundSftpKeyPassphrase&quot;, LookupHelper.get(&quot;Config-sensitive&quot;, &quot;AETNA_INBOUND_SFTP_KEY_PASSPHRASE&quot;));
+// (Secrets Manager). Running password-only means this entry is absent entirely, in which
+// case LookupHelper.get returns Java null - globalMap is backed by a ConcurrentHashMap,
+// which throws NullPointerException on put(key, null) (unlike a plain HashMap), so null
+// is coerced to &apos;&apos; here before storing. &apos;&apos; is falsy in the source script&apos;s
+// if (sftpPrivateKeyPem) check, same as null would have been, so this changes nothing
+// about the actual login behavior - it only prevents the deploy script from crashing.
+// If the key IS configured but has no passphrase, set AETNA_INBOUND_SFTP_KEY_PASSPHRASE
+// to the literal string &quot;NONE&quot; rather than leaving it blank/absent - Config-sensitive
+// does not accept a truly blank value on an entry that exists, so the source script
+// treats that sentinel as no passphrase (see the hasPassphrase check right before
+// jsch.addIdentity in the main poll section below).
+var aetnaPrivateKeyLookup = LookupHelper.get(&quot;Config-sensitive&quot;, &quot;AETNA_INBOUND_SFTP_PRIVATE_KEY&quot;);
+globalMap.put(&quot;aetnaInboundSftpPrivateKeyPem&quot;, aetnaPrivateKeyLookup == null ? &apos;&apos; : aetnaPrivateKeyLookup);
+
+var aetnaPassphraseLookup = LookupHelper.get(&quot;Config-sensitive&quot;, &quot;AETNA_INBOUND_SFTP_KEY_PASSPHRASE&quot;);
+globalMap.put(&quot;aetnaInboundSftpKeyPassphrase&quot;, aetnaPassphraseLookup == null ? &apos;&apos; : aetnaPassphraseLookup);
 
 // Diagnostic-only: when aetnaSftpDebugLogging=true in the configuration map, install a
 // JSch protocol-level logger so channel logs show the SSH/SFTP handshake and auth
@@ -724,6 +731,20 @@ if (&quot;true&quot;.equalsIgnoreCase(&apos;&apos; + configurationMap.get(&quot;
         }
     }));
     logger.info(&apos;Aetna SFTP Bridge: JSch protocol-level debug logging enabled&apos;);
+} else {
+    // JSch.setLogger has no &quot;unset&quot; - only &quot;replace&quot;. If a previous deploy turned the flag
+    // on, the verbose logger installed above stays active JVM-wide even after the flag is
+    // turned back off, until something explicitly replaces it. This installs a no-op logger
+    // so a redeploy with the flag off actually silences it, rather than leaving the earlier
+    // deploy&apos;s verbose logger running indefinitely.
+    Packages.com.jcraft.jsch.JSch.setLogger(new Packages.com.jcraft.jsch.Logger({
+        isEnabled: function(level) {
+            return false;
+        },
+        log: function(level, message) {
+            // intentionally does nothing
+        }
+    }));
 }
 
 return;</deployScript>
@@ -736,7 +757,7 @@ return;</undeployScript>
     <encryptData>false</encryptData>
     <encryptAttachments>true</encryptAttachments>
     <encryptCustomMetaData>true</encryptCustomMetaData>
-    <removeContentOnCompletion>true</removeContentOnCompletion>
+    <removeContentOnCompletion>false</removeContentOnCompletion>
     <removeOnlyFilteredOnCompletion>false</removeOnlyFilteredOnCompletion>
     <removeAttachmentsOnCompletion>true</removeAttachmentsOnCompletion>
     <initialState>STARTED</initialState>
@@ -767,11 +788,16 @@ return;</undeployScript>
   <exportData>
     <metadata>
       <enabled>true</enabled>
+      <lastModified>
+        <time>1788427464910</time>
+        <timezone>Asia/Calcutta</timezone>
+      </lastModified>
       <pruningSettings>
         <pruneMetaDataDays>1</pruneMetaDataDays>
         <archiveEnabled>false</archiveEnabled>
         <pruneErroredMessages>false</pruneErroredMessages>
       </pruningSettings>
+      <userId>6</userId>
     </metadata>
   </exportData>
 </channel>
