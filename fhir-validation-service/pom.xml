@@ -17,7 +17,6 @@
     <name>Fhir Validation Service</name>
     <description>Standalone application for FHIR Validation</description>
     <properties>
-        <aws.sdk.version>2.28.0</aws.sdk.version>
 	</properties>
     <repositories>
 		<!-- Used in higher environments where the .m2 repository is copied to the project base directory -->
@@ -51,22 +50,20 @@
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>secretsmanager</artifactId>
-            <version>2.17.87</version>
+            <version>${aws.sdk.version}</version>
         </dependency>
         <!-- <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>sqs</artifactId>
-            <version>2.17.87</version>
+            <version>${aws.sdk.version}</version>
         </dependency> -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>2.17.1</version>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.dataformat</groupId>
             <artifactId>jackson-dataformat-yaml</artifactId>
-            <version>2.17.1</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -97,17 +94,15 @@
         <!-- <dependency>
             <groupId>com.squareup.okio</groupId>
             <artifactId>okio</artifactId>
-            <version>3.9.1</version>
         </dependency> -->
         <dependency>
             <groupId>io.opentelemetry</groupId>
             <artifactId>opentelemetry-sdk-extension-autoconfigure</artifactId>
-            <version>1.46.0</version>
         </dependency>
         <dependency>
             <groupId>org.bouncycastle</groupId>
             <artifactId>bcprov-jdk18on</artifactId>
-            <version>1.84</version>
+            <version>1.87</version>
         </dependency>
         <dependency>
             <groupId>ca.uhn.hapi.fhir</groupId>
@@ -137,7 +132,7 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <version>42.7.11</version>
+            <version>42.7.14</version>
         </dependency>
         <!-- <dependency>
             <groupId>com.opencsv</groupId>
@@ -193,7 +188,7 @@
         <dependency>
 			<groupId>org.springdoc</groupId>
 			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-			<version>2.5.0</version>
+			<version>2.8.17</version>
 		</dependency>
         <dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -213,12 +208,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jooq</artifactId>
-            <version>3.3.1</version>
         </dependency>
         <dependency>
             <groupId>org.jooq</groupId>
             <artifactId>jooq-jackson-extensions</artifactId>
-            <version>3.19.10</version>
+            <version>3.19.35</version>
         </dependency>
         <dependency>
 			<groupId>org.techbd</groupId>
@@ -250,7 +244,7 @@
         <dependency>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
-            <version>20250107</version>
+            <version>20260814</version>
         </dependency>
         <dependency>
             <groupId>org.graalvm.js</groupId>

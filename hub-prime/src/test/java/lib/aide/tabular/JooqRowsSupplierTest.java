@@ -94,7 +94,7 @@ public class JooqRowsSupplierTest {
                 final var expectedSQL = """
                                 SELECT "country", "gold"
                                 FROM medals
-                                WHERE lower(CAST("country" AS varchar)) = lower(?)
+                                WHERE lower(cast("country" AS varchar)) = lower(?)
                                 ORDER BY "gold" DESC
                                 OFFSET ? ROWS
                                 FETCH NEXT ? ROWS ONLY

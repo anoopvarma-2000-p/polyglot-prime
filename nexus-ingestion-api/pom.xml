@@ -21,9 +21,8 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <aws.sdk.version>2.28.0</aws.sdk.version>
         <hapi.version>2.6.0</hapi.version>
-        <camel.version>4.10.0</camel.version>
+        <camel.version>4.10.9</camel.version>
 
         <!--
             Skip flags — override from the command line as needed:
@@ -47,10 +46,26 @@
             <version>1.19.7</version>
             <scope>test</scope>
         </dependency>    
+        <!-- Only the Netty modules the code uses (was netty-all); versions come from netty-bom in the root pom -->
         <dependency>
             <groupId>io.netty</groupId>
-            <artifactId>netty-all</artifactId>
-            <version>4.1.108.Final</version>
+            <artifactId>netty-buffer</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-transport</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-handler</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-haproxy</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -102,18 +117,11 @@
         <dependency>
             <groupId>org.springframework.ws</groupId>
             <artifactId>spring-ws-test</artifactId>
-            <version>4.0.10</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.springframework.ws</groupId>
             <artifactId>spring-ws-core</artifactId>
-            <version>4.1.1</version>
-        </dependency>
-        <dependency>
-            <groupId>org.openehealth.ipf.commons</groupId>
-            <artifactId>ipf-commons-ihe-xds</artifactId>
-            <version>4.1.0</version>
         </dependency>
         <!-- AWS Lambda Core -->
         <dependency>
@@ -143,31 +151,22 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>2.15.0</version>
         </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
-            <version>2.10.1</version>
-        </dependency>
-
-        <!-- Spring Cloud AWS -->
-        <dependency>
-            <groupId>io.awspring.cloud</groupId>
-            <artifactId>spring-cloud-starter-aws</artifactId>
-            <version>2.4.4</version>
         </dependency>
 
         <!-- Apache Camel -->
         <dependency>
             <groupId>org.apache.camel.springboot</groupId>
             <artifactId>camel-spring-boot-starter</artifactId>
-            <version>4.10.0</version>
+            <version>${camel.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.camel.springboot</groupId>
             <artifactId>camel-mllp-starter</artifactId>
-            <version>4.10.0</version>
+            <version>${camel.version}</version>
         </dependency>
         
         <!-- TCP support for Camel -->
@@ -263,12 +262,12 @@
         <dependency>
             <groupId>org.bouncycastle</groupId>
             <artifactId>bcprov-jdk18on</artifactId>
-            <version>1.84</version> <!-- Latest secure version -->
+            <version>1.87</version> <!-- Latest secure version -->
         </dependency>
         <dependency>
             <groupId>org.bouncycastle</groupId>
             <artifactId>bcpkix-jdk18on</artifactId>
-            <version>1.84</version> <!-- Latest secure version -->
+            <version>1.87</version> <!-- Latest secure version -->
         </dependency>
     </dependencies>
 
