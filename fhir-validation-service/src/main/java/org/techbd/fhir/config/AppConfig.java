@@ -48,6 +48,12 @@ public class AppConfig {
         private int maxDynamic = 2;
         /** A dynamic validator is evicted after it has not been used for this long. */
         private Duration dynamicTtl = Duration.ofMinutes(30);
+        /**
+         * Validate SNOMED, ICD-10-CM, LOINC, CPT, HCPCS and BCP-47 codes by lookup in shared code sets instead of
+         * enumerating them into CodeSystems/ValueSets (much less memory, faster first validation). Read when the
+         * validators are built, so a change needs a restart.
+         */
+        private boolean lookupTerminology = false;
     }
 
     @Getter

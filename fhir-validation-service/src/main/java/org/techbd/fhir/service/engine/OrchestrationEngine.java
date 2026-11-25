@@ -54,6 +54,7 @@ import org.techbd.fhir.service.validation.PostPopulateSupport;
 import org.techbd.fhir.service.validation.PrePopulateSupport;
 import org.techbd.fhir.service.validation.RaceEthnicityValidationSupport;
 import org.techbd.fhir.service.validation.ReferenceCodeSets;
+import org.techbd.fhir.service.validation.ReferenceTerminologyValidationSupport;
 import org.techbd.fhir.util.FHIRUtil;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -215,6 +216,7 @@ public class OrchestrationEngine {
                             .withTemplateLogger(LOG)
                             .withMaxDynamicValidators(validatorSettings.getMaxDynamic())
                             .withDynamicValidatorTtl(validatorSettings.getDynamicTtl())
+                            .withLookupTerminology(validatorSettings.isLookupTerminology())
                             .build();
                 case HL7_EMBEDDED:
                     return new Hl7ValidationEngineEmbedded.Builder().build();
@@ -320,6 +322,8 @@ public class OrchestrationEngine {
         /** Explicit reference codes (tests); {@code null} means the JVM-wide {@link ReferenceCodeSets#shared()}. */
         @Getter(AccessLevel.NONE)
         private final ReferenceCodeSets referenceCodeSetsOverride;
+        /** Lookup-based reference terminology instead of enumerated CodeSystems/ValueSets. */
+        private final boolean lookupTerminology;
         private final AtomicLong validatorInitializationCount = new AtomicLong();
         private final AtomicInteger activeValidations = new AtomicInteger();
 
@@ -338,12 +342,14 @@ public class OrchestrationEngine {
             this.LOG = builder.LOG;
             this.interactionId = builder.interactionId;
             this.referenceCodeSetsOverride = builder.referenceCodeSets;
+            this.lookupTerminology = builder.lookupTerminology;
             this.validatorRegistry = new FhirBundleValidatorRegistry<>(
                     builder.maxDynamicValidators,
                     builder.dynamicValidatorTtl,
                     this::onDynamicValidatorRemoved);
-            LOG.info("FHIR validator cache: maxDynamic={}, dynamicTtl={}",
-                    validatorRegistry.maxDynamic(), validatorRegistry.dynamicTtl());
+            LOG.info("FHIR validator cache: maxDynamic={}, dynamicTtl={}, terminology={}",
+                    validatorRegistry.maxDynamic(), validatorRegistry.dynamicTtl(),
+                    lookupTerminology ? "lookup" : "enumerated");
             initializeFhirBundleValidators();
         }
 
@@ -512,7 +518,27 @@ public class OrchestrationEngine {
             try {
                 LOG.info("Initializing FHIR Validator for package: {} inteactionId :{} ", shinNyPackagePath,
                         interactionId);
+                final var supportChain =
+                        buildValidationSupportChain(shinNyPackagePath, basePackages, profileBaseUrl, igVersion);
+                final var cache = new CachingValidationSupport(supportChain);
+                final var instanceValidator = new FhirInstanceValidator(cache);
 
+                FhirValidator fhirValidator = fhirContext.newValidator().registerValidatorModule(instanceValidator);
+                // fhirValidator.setConcurrentBundleValidation(true);
+                // ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+                // fhirValidator.setExecutorService(executorService);
+                return fhirValidator;
+            } finally {
+                span.end();
+            }
+        }
+
+        /**
+         * Builds the validation support chain (IG packages, reference terminology, HAPI supports) for one
+         * validator. Package-private so tests can inspect it or put a recording support in front of it.
+         */
+        ValidationSupportChain buildValidationSupportChain(String shinNyPackagePath, Map<String, String> basePackages,
+                String profileBaseUrl, String igVersion) {
                 final var supportChain = new ValidationSupportChain();
                 final var defaultSupport = new DefaultProfileValidationSupport(fhirContext);
 
@@ -554,6 +580,9 @@ public class OrchestrationEngine {
                         fhirContext,
                         "ig-packages/reference/race.psv");
                 supportChain.addValidationSupport(raceEthnicitySupport);
+                // The reference CodeSystems are built in both modes: other package and IG ValueSets (for example
+                // consent-category, the SHIN-NY language and pronoun ValueSets, SNOMED is-a filters) are still
+                // evaluated against them by HAPI's in-memory terminology server.
                 final var prePopulateSupport = new PrePopulateSupport(tracer, appLogger, getReferenceCodeSets());
                 var prePopulatedValidationSupport = prePopulateSupport.build(fhirContext);
                 prePopulateSupport.addCodeSystems(supportChain, prePopulatedValidationSupport, igVersion);
@@ -562,6 +591,12 @@ public class OrchestrationEngine {
                 supportChain.addValidationSupport(defaultSupport);
                 supportChain.addValidationSupport(new CommonCodeSystemsTerminologyService(fhirContext));
                 supportChain.addValidationSupport(new SnapshotGeneratingValidationSupport(fhirContext));
+                if (lookupTerminology) {
+                    // Directly before the in-memory terminology server, whose role it takes over for the reference
+                    // code systems; CommonCodeSystemsTerminologyService (above) still answers what it did before.
+                    supportChain.addValidationSupport(
+                            new ReferenceTerminologyValidationSupport(fhirContext, getReferenceCodeSets(), igVersion));
+                }
                 supportChain.addValidationSupport(new InMemoryTerminologyServerValidationSupport(fhirContext));
 
                 /*boolean isTestProfile = profileBaseUrl != null
@@ -591,19 +626,10 @@ public class OrchestrationEngine {
                 
                 supportChain.addValidationSupport(prePopulatedValidationSupport);
                 prePopulatedValidationSupport = null;
-                final var postPopulateSupport = new PostPopulateSupport(tracer, appLogger, getReferenceCodeSets());
+                final var postPopulateSupport =
+                        new PostPopulateSupport(tracer, appLogger, getReferenceCodeSets(), !lookupTerminology);
                 postPopulateSupport.update(supportChain,profileBaseUrl, igVersion);
-                final var cache = new CachingValidationSupport(supportChain);
-                final var instanceValidator = new FhirInstanceValidator(cache);
-                
-                FhirValidator fhirValidator = fhirContext.newValidator().registerValidatorModule(instanceValidator);
-                // fhirValidator.setConcurrentBundleValidation(true);
-                // ExecutorService executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-                // fhirValidator.setExecutorService(executorService);
-                return fhirValidator;                
-            } finally {
-                span.end();
-            }
+                return supportChain;
         }
 
         private String extractProfileUrl(String jsonString) {
@@ -893,6 +919,7 @@ public class OrchestrationEngine {
             private int maxDynamicValidators = FhirBundleValidatorRegistry.DEFAULT_MAX_DYNAMIC_VALIDATORS;
             private Duration dynamicValidatorTtl = FhirBundleValidatorRegistry.DEFAULT_DYNAMIC_VALIDATOR_TTL;
             private ReferenceCodeSets referenceCodeSets;
+            private boolean lookupTerminology;
 
             public Builder withInteractionId(@NotNull final String interactionId) {
                 this.interactionId = interactionId;
@@ -916,6 +943,15 @@ public class OrchestrationEngine {
              */
             public Builder withReferenceCodeSets(final ReferenceCodeSets referenceCodeSets) {
                 this.referenceCodeSets = referenceCodeSets;
+                return this;
+            }
+
+            /**
+             * {@code true} to validate the reference code systems by lookup
+             * ({@link ReferenceTerminologyValidationSupport}) instead of enumerating them. Default {@code false}.
+             */
+            public Builder withLookupTerminology(final boolean lookupTerminology) {
+                this.lookupTerminology = lookupTerminology;
                 return this;
             }
 

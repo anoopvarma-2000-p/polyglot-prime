@@ -224,4 +224,42 @@ class ReferencePopulateSupportSharingTest {
 
         assertThat(chain.fetchValueSet(VS_OBSERVATION)).isNull();
     }
+
+    // ----- lookup terminology mode -----
+
+    private static List<String> systems(ValueSet vs) {
+        return vs.getCompose().getInclude().stream().map(ValueSet.ConceptSetComponent::getSystem).toList();
+    }
+
+    @Test
+    void lookupModeAddsOnlyCustomQuestionnaireCodesAndLanguageSubtags() {
+        final var chain = chainWithEmptyValueSets();
+
+        new PostPopulateSupport(tracer, appLogger, codeSets, false).update(chain, PROFILE_BASE_URL, "1.9.4");
+
+        assertThat(systems(valueSet(chain, VS_OBSERVATION))).containsExactly(
+                PROFILE_BASE_URL + "/CodeSystem/NYSHRSNQuestionnaire",
+                PROFILE_BASE_URL + "/CodeSystem/NYS-HRSN-Questionnaire");
+        assertThat(systems(valueSet(chain, VS_SURVEY))).containsExactly(
+                PROFILE_BASE_URL + "/CodeSystem/NYSHRSNQuestionnaire",
+                PROFILE_BASE_URL + "/CodeSystem/NYS-HRSN-Questionnaire");
+        assertThat(codes(include(valueSet(chain, VS_SURVEY), PROFILE_BASE_URL + "/CodeSystem/NYSHRSNQuestionnaire")))
+                .containsExactly("NYS-AHC-HRSN", "NYSAHCHRSN");
+        assertThat(valueSet(chain, VS_CONDITION).getCompose().getInclude()).isEmpty();
+        assertThat(valueSet(chain, VS_PROCEDURE).getCompose().getInclude()).isEmpty();
+        assertThat(codes(include(valueSet(chain, VS_LANGUAGES), BCP47))).containsExactly("en", "es");
+    }
+
+    @Test
+    void lookupModeKeepsTheSameOrderOfIncludesAsTheFullUpdate() {
+        final var full = chainWithEmptyValueSets();
+        final var lookup = chainWithEmptyValueSets();
+        new PostPopulateSupport(tracer, appLogger, codeSets).update(full, PROFILE_BASE_URL, "1.9.4");
+        new PostPopulateSupport(tracer, appLogger, codeSets, false).update(lookup, PROFILE_BASE_URL, "1.9.4");
+
+        // Lookup mode = full update minus the LOINC/SNOMED/ICD-10/HCPCS enumerations, in the same order.
+        assertThat(systems(valueSet(lookup, VS_OBSERVATION)))
+                .isEqualTo(systems(valueSet(full, VS_OBSERVATION)).stream().filter(s -> !LOINC.equals(s)).toList());
+        assertThat(systems(valueSet(lookup, VS_LANGUAGES))).isEqualTo(systems(valueSet(full, VS_LANGUAGES)));
+    }
 }

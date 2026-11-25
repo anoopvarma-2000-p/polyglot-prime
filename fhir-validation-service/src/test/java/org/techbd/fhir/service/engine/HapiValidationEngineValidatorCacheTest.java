@@ -8,8 +8,12 @@ import static org.mockito.Mockito.when;
 
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
+import org.hl7.fhir.common.hapi.validation.support.CommonCodeSystemsTerminologyService;
+import org.hl7.fhir.common.hapi.validation.support.InMemoryTerminologyServerValidationSupport;
+import org.hl7.fhir.common.hapi.validation.support.ValidationSupportChain;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.techbd.corelib.util.AppLogger;
@@ -18,6 +22,7 @@ import org.techbd.fhir.config.AppConfig;
 import org.techbd.fhir.config.AppConfig.FhirV4Config;
 import org.techbd.fhir.exceptions.ErrorCode;
 import org.techbd.fhir.service.validation.ReferenceCodeSets;
+import org.techbd.fhir.service.validation.ReferenceTerminologyValidationSupport;
 
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanBuilder;
@@ -177,5 +182,62 @@ class HapiValidationEngineValidatorCacheTest {
     private static OrchestrationEngine.HapiValidationEngine hapiEngineOf(OrchestrationEngine orchestrationEngine) {
         return (OrchestrationEngine.HapiValidationEngine) orchestrationEngine
                 .getValidationEngine(OrchestrationEngine.ValidationEngineIdentifier.HAPI);
+    }
+
+    // ----- lookup terminology (R4) wiring -----
+
+    private static List<Class<?>> supportTypes(ValidationSupportChain chain) {
+        return chain.getValidationSupports().stream().<Class<?>>map(Object::getClass).toList();
+    }
+
+    @Test
+    void lookupTerminologyIsOffByDefault() {
+        assertThat(engineBuilder().build().isLookupTerminology()).isFalse();
+        assertThat(new AppConfig.ValidatorSettings().isLookupTerminology()).isFalse();
+    }
+
+    @Test
+    void lookupTerminologyAddsReferenceSupportDirectlyBeforeInMemoryServer() {
+        final var engine = engineBuilder()
+                .withLookupTerminology(true)
+                .withReferenceCodeSets(ReferenceCodeSets.load("org/techbd/reference-codes-test/"))
+                .build();
+
+        final var types = supportTypes(engine.buildValidationSupportChain(null, null, "http://shinny.org/us/ny/hrsn",
+                "1.9.4"));
+
+        final int reference = types.indexOf(ReferenceTerminologyValidationSupport.class);
+        assertThat(reference).isPositive();
+        assertThat(types.get(reference + 1)).isEqualTo(InMemoryTerminologyServerValidationSupport.class);
+        assertThat(types.indexOf(CommonCodeSystemsTerminologyService.class)).isLessThan(reference);
+        // The reference CodeSystems are still provided (other ValueSets are expanded against them).
+        assertThat(engine.buildValidationSupportChain(null, null, "http://shinny.org/us/ny/hrsn", "1.9.4")
+                .fetchCodeSystem("http://loinc.org")).isNotNull();
+    }
+
+    @Test
+    void enumeratedTerminologyHasNoReferenceSupport() {
+        final var engine = engineBuilder()
+                .withReferenceCodeSets(ReferenceCodeSets.load("org/techbd/reference-codes-test/"))
+                .build();
+
+        final var types = supportTypes(engine.buildValidationSupportChain(null, null, "http://shinny.org/us/ny/hrsn",
+                "1.9.4"));
+
+        assertThat(types).doesNotContain(ReferenceTerminologyValidationSupport.class)
+                .contains(InMemoryTerminologyServerValidationSupport.class);
+    }
+
+    @Test
+    void orchestrationEnginePassesLookupTerminologySetting() {
+        final AppConfig.ValidatorSettings validatorSettings = new AppConfig.ValidatorSettings();
+        validatorSettings.setLookupTerminology(true);
+        final AppConfig.FhirSettings fhirSettings = new AppConfig.FhirSettings();
+        fhirSettings.setValidator(validatorSettings);
+        final AppConfig appConfig = mock(AppConfig.class);
+        when(appConfig.getIgPackages()).thenReturn(igPackagesWithoutConfiguredShinny());
+        when(appConfig.getFhir()).thenReturn(fhirSettings);
+
+        assertThat(hapiEngineOf(new OrchestrationEngine(appConfig, appLogger)).isLookupTerminology()).isTrue();
     }
 }

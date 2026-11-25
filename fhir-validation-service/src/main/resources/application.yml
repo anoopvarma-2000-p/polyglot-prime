@@ -59,6 +59,11 @@ org:
         #   dynamic-ttl: a dynamic validator unused for this long is evicted, even with no traffic
         max-dynamic: ${TECHBD_FHIR_VALIDATOR_MAX_DYNAMIC:2}
         dynamic-ttl: ${TECHBD_FHIR_VALIDATOR_DYNAMIC_TTL:30m}
+        # true: validate SNOMED, ICD-10-CM, LOINC, CPT, HCPCS and BCP-47 codes by lookup in shared code sets
+        #       (ReferenceTerminologyValidationSupport) instead of enumerating ~530k codes into every validator.
+        #       Much less heap and a faster first validation; same validation results. Applied at startup.
+        # false: enumerated terminology (previous behaviour).
+        lookup-terminology: ${TECHBD_FHIR_VALIDATOR_LOOKUP_TERMINOLOGY:false}
     baseFHIRURL: ${TECHBD_BASE_FHIR_URL} #This is the default FHIR url used in generating FHIR from CSV
     validation-severity-level: error  # Possible values: fatal, error, warning, information
     structureDefinitionsUrls:

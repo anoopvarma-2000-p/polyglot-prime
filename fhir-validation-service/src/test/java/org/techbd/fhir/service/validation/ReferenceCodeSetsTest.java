@@ -140,4 +140,40 @@ class ReferenceCodeSetsTest {
         assertThat(vsCodes(shared.getCustomSystemValueSetConcepts()))
                 .isEqualTo(vsCodes(ConceptReaderUtils.getValueSetConcepts_wCode(base + "custom-system-code.psv")));
     }
+
+    @Test
+    void codeSetsContainTheSameCodesAsTheConceptLists() {
+        final ReferenceCodeSets codes = ReferenceCodeSets.load(TEST_CODES_PATH);
+
+        assertThat(codes.getSnomedCodes()).containsExactlyInAnyOrderElementsOf(csCodes(codes.getSnomedCodeSystemConcepts()));
+        assertThat(codes.getIcd10Codes()).containsExactlyInAnyOrder("E11.9", "I10");
+        assertThat(codes.getLoincCodes()).containsExactlyInAnyOrder("71802-3", "96778-6");
+        assertThat(codes.getCptCodes()).containsExactlyInAnyOrder("CODE", "0001A", "0001F");
+        assertThat(codes.getHcpcsCodes()).containsExactlyInAnyOrder("G0136", "T1015");
+        assertThat(codes.getLanguageCodes()).containsExactlyInAnyOrder("en", "es");
+        assertThat(codes.getCustomSystemCodes()).containsExactlyInAnyOrder("NYS-AHC-HRSN", "NYSAHCHRSN");
+    }
+
+    @Test
+    void codeSetsAreUnmodifiableAndBuiltOnce() {
+        final ReferenceCodeSets codes = ReferenceCodeSets.load(TEST_CODES_PATH);
+
+        assertThat(codes.getLoincCodes()).isSameAs(codes.getLoincCodes());
+        assertThat(codes.getSnomedCodeSystemConcepts()).isSameAs(codes.getSnomedCodeSystemConcepts());
+        assertThatThrownBy(() -> codes.getLoincCodes().add("x")).isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    void sharedProductionCodeSetsMatchTheConceptLists() {
+        final ReferenceCodeSets shared = ReferenceCodeSets.shared();
+
+        assertThat(shared.getSnomedCodes()).hasSize(shared.getSnomedCodeSystemConcepts().size());
+        assertThat(shared.getIcd10Codes()).hasSize(shared.getIcd10CodeSystemConcepts().size());
+        assertThat(shared.getLoincCodes()).hasSize(shared.getLoincCodeSystemConcepts().size());
+        assertThat(shared.getCptCodes()).hasSize(shared.getCptCodeSystemConcepts().size());
+        assertThat(shared.getHcpcsCodes()).hasSize(shared.getHcpcsCodeSystemConcepts().size());
+        assertThat(shared.getLanguageCodes()).hasSize(shared.getLanguageCodeSystemConcepts().size());
+        assertThat(shared.getCustomSystemCodes()).hasSize(shared.getCustomSystemValueSetConcepts().size());
+        assertThat(shared.getSnomedCodes()).contains("160245001", "71388002");
+    }
 }
