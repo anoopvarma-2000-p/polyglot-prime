@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.hl7.fhir.common.hapi.validation.support.PrePopulatedValidationSupport;
 import org.hl7.fhir.common.hapi.validation.support.ValidationSupportChain;
@@ -12,7 +13,6 @@ import org.hl7.fhir.r4.model.Enumerations;
 import org.hl7.fhir.r4.model.ValueSet;
 import org.techbd.corelib.util.AppLogger;
 import org.techbd.corelib.util.TemplateLogger;
-import org.techbd.fhir.util.ConceptReaderUtils;
 import org.techbd.fhir.util.FHIRUtil;
 import org.techbd.fhir.util.FileUtils;
 
@@ -22,9 +22,9 @@ import io.opentelemetry.api.trace.Tracer;
 
 public class PrePopulateSupport {
 
-    private final String referenceCodesPath = "ig-packages/reference/";
     private final Tracer tracer;
     private final TemplateLogger LOG;
+    // Shared, read-only reference concepts (parsed once per JVM by ReferenceCodeSets).
     private final List<CodeSystem.ConceptDefinitionComponent> hcpcsConcepts;
     private final List<CodeSystem.ConceptDefinitionComponent> snomedConcepts;
     private final List<CodeSystem.ConceptDefinitionComponent> icd10Concepts;
@@ -32,15 +32,22 @@ public class PrePopulateSupport {
     private final List<CodeSystem.ConceptDefinitionComponent> loincConcepts;
     private final List<CodeSystem.ConceptDefinitionComponent> languageConcepts;
 
+    /** Uses the JVM-wide {@link ReferenceCodeSets#shared()} reference codes. */
     public PrePopulateSupport(final Tracer tracer, final AppLogger appLogger) {
+        this(tracer, appLogger, ReferenceCodeSets.shared());
+    }
+
+    public PrePopulateSupport(final Tracer tracer, final AppLogger appLogger,
+            final ReferenceCodeSets referenceCodeSets) {
+        Objects.requireNonNull(referenceCodeSets, "referenceCodeSets");
         this.tracer = tracer;
         this.LOG = appLogger.getLogger(PrePopulateSupport.class);
-        this.hcpcsConcepts = ConceptReaderUtils.getCodeSystemConcepts_wCode(referenceCodesPath.concat("hcpcs.psv"));
-        this.snomedConcepts = ConceptReaderUtils.getCodeSystemConcepts_wCode(referenceCodesPath.concat("snomed.psv"));
-        this.icd10Concepts = ConceptReaderUtils.getCodeSystemConcepts_wCode(referenceCodesPath.concat("icd10cm.psv"));
-        this.cptConcepts = ConceptReaderUtils.getCodeSystemConcepts_wCode(referenceCodesPath.concat("cpt.psv"));
-        this.loincConcepts = ConceptReaderUtils.getCodeSystemConcepts_wCode(referenceCodesPath.concat("loinc.psv"));
-        this.languageConcepts = ConceptReaderUtils.getCodeSystemConcepts_wCode(referenceCodesPath.concat("language-subtags.psv"));
+        this.hcpcsConcepts = referenceCodeSets.getHcpcsCodeSystemConcepts();
+        this.snomedConcepts = referenceCodeSets.getSnomedCodeSystemConcepts();
+        this.icd10Concepts = referenceCodeSets.getIcd10CodeSystemConcepts();
+        this.cptConcepts = referenceCodeSets.getCptCodeSystemConcepts();
+        this.loincConcepts = referenceCodeSets.getLoincCodeSystemConcepts();
+        this.languageConcepts = referenceCodeSets.getLanguageCodeSystemConcepts();
     }
 
     public PrePopulatedValidationSupport build(FhirContext fhirContext) {

@@ -2,12 +2,12 @@ package org.techbd.fhir.service.validation;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 import org.hl7.fhir.common.hapi.validation.support.ValidationSupportChain;
 import org.hl7.fhir.r4.model.ValueSet;
 import org.techbd.corelib.util.AppLogger;
 import org.techbd.corelib.util.TemplateLogger;
-import org.techbd.fhir.util.ConceptReaderUtils;
 import org.techbd.fhir.util.FHIRUtil;
 
 import io.opentelemetry.api.trace.Span;
@@ -15,13 +15,10 @@ import io.opentelemetry.api.trace.Tracer;
 
 public class PostPopulateSupport {
 
-    private final String referenceCodesPath = "ig-packages/reference/";
     private final Tracer tracer;
     private final TemplateLogger LOG;
 
-    /*
-     * Load each PSV once and reuse the parsed concepts.
-     */
+    // Shared, read-only reference concepts (parsed once per JVM by ReferenceCodeSets).
     private final List<ValueSet.ConceptReferenceComponent> loincConcepts;
     private final List<ValueSet.ConceptReferenceComponent> snomedConcepts;
     private final List<ValueSet.ConceptReferenceComponent> hcpcsConcepts;
@@ -29,18 +26,22 @@ public class PostPopulateSupport {
     private final List<ValueSet.ConceptReferenceComponent> customSystemConcepts;
     private final List<ValueSet.ConceptReferenceComponent> languageConcepts;
 
-    public PostPopulateSupport(final Tracer tracer,final AppLogger appLogger) {
+    /** Uses the JVM-wide {@link ReferenceCodeSets#shared()} reference codes. */
+    public PostPopulateSupport(final Tracer tracer, final AppLogger appLogger) {
+        this(tracer, appLogger, ReferenceCodeSets.shared());
+    }
+
+    public PostPopulateSupport(final Tracer tracer, final AppLogger appLogger,
+            final ReferenceCodeSets referenceCodeSets) {
+        Objects.requireNonNull(referenceCodeSets, "referenceCodeSets");
         this.tracer = tracer;
         LOG = appLogger.getLogger(PostPopulateSupport.class);
-        /*
-         * Load each PSV only once.
-         */
-        this.loincConcepts = ConceptReaderUtils.getValueSetConcepts_wCode(referenceCodesPath.concat("loinc.psv"));
-        this.snomedConcepts =  ConceptReaderUtils.getValueSetConcepts_wCode(referenceCodesPath.concat("snomed.psv"));
-        this.hcpcsConcepts = ConceptReaderUtils.getValueSetConcepts_wCode(referenceCodesPath.concat("hcpcs.psv"));
-        this.icd10Concepts = ConceptReaderUtils.getValueSetConcepts_wCode(referenceCodesPath.concat("icd10cm.psv"));
-        this.customSystemConcepts =ConceptReaderUtils.getValueSetConcepts_wCode(referenceCodesPath.concat("custom-system-code.psv"));
-        this.languageConcepts = ConceptReaderUtils.getValueSetConcepts_wCode(referenceCodesPath.concat("language-subtags.psv"));
+        this.loincConcepts = referenceCodeSets.getLoincValueSetConcepts();
+        this.snomedConcepts = referenceCodeSets.getSnomedValueSetConcepts();
+        this.hcpcsConcepts = referenceCodeSets.getHcpcsValueSetConcepts();
+        this.icd10Concepts = referenceCodeSets.getIcd10ValueSetConcepts();
+        this.customSystemConcepts = referenceCodeSets.getCustomSystemValueSetConcepts();
+        this.languageConcepts = referenceCodeSets.getLanguageValueSetConcepts();
     }
 
     public void update(final ValidationSupportChain validationSupportChain,final String profileBaseUrl, final String igVersion) {

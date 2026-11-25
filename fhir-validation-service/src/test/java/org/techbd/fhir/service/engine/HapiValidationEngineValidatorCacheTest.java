@@ -17,6 +17,7 @@ import org.techbd.corelib.util.TemplateLogger;
 import org.techbd.fhir.config.AppConfig;
 import org.techbd.fhir.config.AppConfig.FhirV4Config;
 import org.techbd.fhir.exceptions.ErrorCode;
+import org.techbd.fhir.service.validation.ReferenceCodeSets;
 
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanBuilder;
@@ -146,6 +147,23 @@ class HapiValidationEngineValidatorCacheTest {
         assertThat(engine.getValidatorRegistry().maxDynamic()).isZero();
         assertThat(engine.getValidatorRegistry().isDynamicEnabled()).isFalse();
         assertThat(engine.getValidatorRegistry().dynamicTtl()).isEqualTo(Duration.ofMinutes(5));
+    }
+
+    @Test
+    void engineUsesSharedReferenceCodeSetsByDefault() {
+        final var engine = engineBuilder().build();
+
+        assertThat(engine.getReferenceCodeSets()).isSameAs(ReferenceCodeSets.shared());
+        assertThat(engineBuilder().build().getReferenceCodeSets()).isSameAs(engine.getReferenceCodeSets());
+    }
+
+    @Test
+    void engineUsesExplicitReferenceCodeSets() {
+        final ReferenceCodeSets custom = ReferenceCodeSets.load("org/techbd/reference-codes-test/");
+
+        final var engine = engineBuilder().withReferenceCodeSets(custom).build();
+
+        assertThat(engine.getReferenceCodeSets()).isSameAs(custom);
     }
 
     @Test

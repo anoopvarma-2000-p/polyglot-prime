@@ -53,6 +53,7 @@ import org.techbd.fhir.service.validation.FhirBundleValidator;
 import org.techbd.fhir.service.validation.PostPopulateSupport;
 import org.techbd.fhir.service.validation.PrePopulateSupport;
 import org.techbd.fhir.service.validation.RaceEthnicityValidationSupport;
+import org.techbd.fhir.service.validation.ReferenceCodeSets;
 import org.techbd.fhir.util.FHIRUtil;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -316,6 +317,9 @@ public class OrchestrationEngine {
         /** Configured validators are pinned; dynamic ones are size- and idle-time-bounded. */
         @Getter(AccessLevel.PACKAGE)
         private final FhirBundleValidatorRegistry<ValidatorCacheKey, CachedFhirBundleValidator> validatorRegistry;
+        /** Explicit reference codes (tests); {@code null} means the JVM-wide {@link ReferenceCodeSets#shared()}. */
+        @Getter(AccessLevel.NONE)
+        private final ReferenceCodeSets referenceCodeSetsOverride;
         private final AtomicLong validatorInitializationCount = new AtomicLong();
         private final AtomicInteger activeValidations = new AtomicInteger();
 
@@ -333,6 +337,7 @@ public class OrchestrationEngine {
             this.appLogger = builder.appLogger;
             this.LOG = builder.LOG;
             this.interactionId = builder.interactionId;
+            this.referenceCodeSetsOverride = builder.referenceCodeSets;
             this.validatorRegistry = new FhirBundleValidatorRegistry<>(
                     builder.maxDynamicValidators,
                     builder.dynamicValidatorTtl,
@@ -357,6 +362,14 @@ public class OrchestrationEngine {
         /** Number of dynamic (header-requested IG version) validators currently cached. */
         public long getDynamicValidatorCount() {
             return validatorRegistry.dynamicCount();
+        }
+
+        /**
+         * Reference codes shared by every validator of this engine (and, by default, by every engine in the JVM).
+         * Resolved lazily so that an engine that never builds a validator never loads the PSV files.
+         */
+        public ReferenceCodeSets getReferenceCodeSets() {
+            return referenceCodeSetsOverride != null ? referenceCodeSetsOverride : ReferenceCodeSets.shared();
         }
 
         /** Number of configured (pinned) validators. */
@@ -541,7 +554,7 @@ public class OrchestrationEngine {
                         fhirContext,
                         "ig-packages/reference/race.psv");
                 supportChain.addValidationSupport(raceEthnicitySupport);
-                final var prePopulateSupport = new PrePopulateSupport(tracer, appLogger);
+                final var prePopulateSupport = new PrePopulateSupport(tracer, appLogger, getReferenceCodeSets());
                 var prePopulatedValidationSupport = prePopulateSupport.build(fhirContext);
                 prePopulateSupport.addCodeSystems(supportChain, prePopulatedValidationSupport, igVersion);
                 supportChain.addValidationSupport(prePopulatedValidationSupport);
@@ -578,7 +591,7 @@ public class OrchestrationEngine {
                 
                 supportChain.addValidationSupport(prePopulatedValidationSupport);
                 prePopulatedValidationSupport = null;
-                final var postPopulateSupport = new PostPopulateSupport(tracer, appLogger);
+                final var postPopulateSupport = new PostPopulateSupport(tracer, appLogger, getReferenceCodeSets());
                 postPopulateSupport.update(supportChain,profileBaseUrl, igVersion);
                 final var cache = new CachingValidationSupport(supportChain);
                 final var instanceValidator = new FhirInstanceValidator(cache);
@@ -879,6 +892,7 @@ public class OrchestrationEngine {
             private TemplateLogger LOG;
             private int maxDynamicValidators = FhirBundleValidatorRegistry.DEFAULT_MAX_DYNAMIC_VALIDATORS;
             private Duration dynamicValidatorTtl = FhirBundleValidatorRegistry.DEFAULT_DYNAMIC_VALIDATOR_TTL;
+            private ReferenceCodeSets referenceCodeSets;
 
             public Builder withInteractionId(@NotNull final String interactionId) {
                 this.interactionId = interactionId;
@@ -893,6 +907,15 @@ public class OrchestrationEngine {
             /** Maximum dynamic (header-requested IG version) validators kept at once; 0 disables them. */
             public Builder withMaxDynamicValidators(final int maxDynamicValidators) {
                 this.maxDynamicValidators = maxDynamicValidators;
+                return this;
+            }
+
+            /**
+             * Reference codes to share between this engine's validators. Defaults to the JVM-wide
+             * {@link ReferenceCodeSets#shared()}; mainly overridden in tests.
+             */
+            public Builder withReferenceCodeSets(final ReferenceCodeSets referenceCodeSets) {
+                this.referenceCodeSets = referenceCodeSets;
                 return this;
             }
 
