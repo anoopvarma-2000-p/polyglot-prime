@@ -49,6 +49,16 @@ org:
           sdoh: ig-packages/fhir-v4/sdoh-clinicalcare/stu-2.3.0
           uv-sdc: ig-packages/fhir-v4/uv-sdc/stu-3.0.0
           extensions: ig-packages/fhir-v4/uv-extensions/5.2.0
+    fhir:
+      validator:
+        # Validators for the shinny-packages above are built at startup and never evicted.
+        # Requests whose IG version header names another bundled version get a "dynamic" validator
+        # (~0.7 GB heap and ~14 s to build each). These settings bound them:
+        #   max-dynamic: how many dynamic validators may be kept at once (0 = never build them;
+        #                such requests fall back to matching the bundle's meta.profile URL)
+        #   dynamic-ttl: a dynamic validator unused for this long is evicted, even with no traffic
+        max-dynamic: ${TECHBD_FHIR_VALIDATOR_MAX_DYNAMIC:2}
+        dynamic-ttl: ${TECHBD_FHIR_VALIDATOR_DYNAMIC_TTL:30m}
     baseFHIRURL: ${TECHBD_BASE_FHIR_URL} #This is the default FHIR url used in generating FHIR from CSV
     validation-severity-level: error  # Possible values: fatal, error, warning, information
     structureDefinitionsUrls:

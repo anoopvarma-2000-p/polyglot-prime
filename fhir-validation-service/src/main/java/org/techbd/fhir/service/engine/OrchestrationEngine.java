@@ -59,8 +59,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.RemovalCause;
 
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.context.support.DefaultProfileValidationSupport;
@@ -70,6 +69,7 @@ import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
 import jakarta.validation.constraints.NotNull;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -206,11 +206,14 @@ public class OrchestrationEngine {
         return validationEngineCache.computeIfAbsent(type, k -> {
             switch (type) {
                 case HAPI:
+                    final AppConfig.ValidatorSettings validatorSettings = validatorSettings();
                     return new HapiValidationEngine.Builder()
                             .withIgPackages(igPackages)
                             .withTracer(tracer)
                             .withAppLogger(appLogger)
                             .withTemplateLogger(LOG)
+                            .withMaxDynamicValidators(validatorSettings.getMaxDynamic())
+                            .withDynamicValidatorTtl(validatorSettings.getDynamicTtl())
                             .build();
                 case HL7_EMBEDDED:
                     return new Hl7ValidationEngineEmbedded.Builder().build();
@@ -221,6 +224,13 @@ public class OrchestrationEngine {
             }
         });
     }
+    /** Validator cache settings from {@code org.techbd.fhir.validator.*}, with defaults when not bound. */
+    private AppConfig.ValidatorSettings validatorSettings() {
+        final AppConfig.FhirSettings fhirSettings = appConfig == null ? null : appConfig.getFhir();
+        final AppConfig.ValidatorSettings settings = fhirSettings == null ? null : fhirSettings.getValidator();
+        return settings == null ? new AppConfig.ValidatorSettings() : settings;
+    }
+
     public ValidationEngine getValidationEngine(@NotNull final ValidationEngineIdentifier type) {
         return this.validationEngineCache.get(type);
     }
@@ -290,8 +300,6 @@ public class OrchestrationEngine {
 
     @Getter
     public static class HapiValidationEngine implements OrchestrationEngine.ValidationEngine {
-        private static final int MAX_DYNAMIC_FHIR_BUNDLE_VALIDATORS = 32;
-
         private final Observability observability;
         private final Instant engineInitAt = Instant.now();
         private final Instant engineConstructedAt;
@@ -303,8 +311,11 @@ public class OrchestrationEngine {
         private final AppLogger appLogger;
         private final TemplateLogger LOG;
         private final String interactionId;
+        /** Configured keys in configuration order; used for profile-URL matching. */
         private final List<ValidatorCacheKey> configuredValidatorKeys = new ArrayList<>();
-        private final Cache<ValidatorCacheKey, CachedFhirBundleValidator> fhirBundleValidators;
+        /** Configured validators are pinned; dynamic ones are size- and idle-time-bounded. */
+        @Getter(AccessLevel.PACKAGE)
+        private final FhirBundleValidatorRegistry<ValidatorCacheKey, CachedFhirBundleValidator> validatorRegistry;
         private final AtomicLong validatorInitializationCount = new AtomicLong();
         private final AtomicInteger activeValidations = new AtomicInteger();
 
@@ -322,19 +333,35 @@ public class OrchestrationEngine {
             this.appLogger = builder.appLogger;
             this.LOG = builder.LOG;
             this.interactionId = builder.interactionId;
-            final int configuredValidatorCount = configuredPackageCount(igPackages);
-            this.fhirBundleValidators = Caffeine.newBuilder()
-                    .maximumSize((long) configuredValidatorCount + MAX_DYNAMIC_FHIR_BUNDLE_VALIDATORS)
-                    .recordStats()
-                    .build();
+            this.validatorRegistry = new FhirBundleValidatorRegistry<>(
+                    builder.maxDynamicValidators,
+                    builder.dynamicValidatorTtl,
+                    this::onDynamicValidatorRemoved);
+            LOG.info("FHIR validator cache: maxDynamic={}, dynamicTtl={}",
+                    validatorRegistry.maxDynamic(), validatorRegistry.dynamicTtl());
             initializeFhirBundleValidators();
         }
 
-        private static int configuredPackageCount(Map<String, FhirV4Config> igPackages) {
-            final FhirV4Config fhirV4Config = igPackages == null ? null : igPackages.get("fhir-v4");
-            final Map<String, ShinnyPackageConfig> shinNyPackages =
-                    fhirV4Config == null ? null : fhirV4Config.getShinnyPackages();
-            return shinNyPackages == null ? 0 : shinNyPackages.size();
+        private void onDynamicValidatorRemoved(ValidatorCacheKey key, CachedFhirBundleValidator value,
+                RemovalCause cause) {
+            LOG.info(
+                    "Evicted dynamic FHIR validator: package={}, IG version={}, profileBaseUrl={}, cause={}, "
+                            + "dynamicCacheSize={}",
+                    key == null ? null : key.packageIdentity(),
+                    key == null ? null : key.igVersion(),
+                    key == null ? null : key.profileBaseUrl(),
+                    cause,
+                    validatorRegistry.dynamicCount());
+        }
+
+        /** Number of dynamic (header-requested IG version) validators currently cached. */
+        public long getDynamicValidatorCount() {
+            return validatorRegistry.dynamicCount();
+        }
+
+        /** Number of configured (pinned) validators. */
+        public int getConfiguredValidatorCount() {
+            return validatorRegistry.configuredCount();
         }
 
         private void initializeFhirBundleValidators() {
@@ -373,7 +400,7 @@ public class OrchestrationEngine {
                                 if (!configuredValidatorKeys.contains(cacheKey)) {
                                     configuredValidatorKeys.add(cacheKey);
                                 }
-                                getOrCreateFhirBundleValidator(cacheKey);
+                                validatorRegistry.registerConfigured(cacheKey, this::buildFhirBundleValidator);
                                 LOG.info("Creating validator: package={}, igVersion={}, basePackages={}",
                                         packagePath,
                                         igVersion,
@@ -389,43 +416,57 @@ public class OrchestrationEngine {
             }
         }
 
-        private FhirBundleValidator getOrCreateFhirBundleValidator(ValidatorCacheKey cacheKey) {
-            final CachedFhirBundleValidator cachedValidator = fhirBundleValidators.get(cacheKey, key -> {
-                final FhirBundleValidator validator = FhirBundleValidator.builder()
-                        .fhirContext(FhirContext.forR4())
-                        .fhirValidator(initializeFhirValidator(
-                                key.packageIdentity(),
-                                key.basePackageConfiguration(),
-                                key.profileBaseUrl(),
-                                key.igVersion()))
-                        .baseFHIRUrl(key.profileBaseUrl())
-                        .packagePath(key.packageIdentity())
-                        .igVersion(key.igVersion())
-                        .build();
-                final long initializationNumber = validatorInitializationCount.incrementAndGet();
-                LOG.info(
-                        "Initialized FHIR validator: package={}, IG version={}, profileBaseUrl={}, "
-                                + "initializationCount={}, activeValidations={}",
-                        key.packageIdentity(),
-                        key.igVersion(),
-                        key.profileBaseUrl(),
-                        initializationNumber,
-                        activeValidations.get());
-                return new CachedFhirBundleValidator(key, validator, initializationNumber);
-            });
-            final var cacheStats = fhirBundleValidators.stats();
-            LOG.debug(
-                    "FHIR validator cache lookup: hitCount={}, missCount={}, initializationCount={}, "
-                            + "cacheSize={}, activeValidations={}",
-                    cacheStats.hitCount(),
-                    cacheStats.missCount(),
-                    validatorInitializationCount.get(),
-                    fhirBundleValidators.estimatedSize(),
+        private CachedFhirBundleValidator buildFhirBundleValidator(ValidatorCacheKey key) {
+            final boolean configured = configuredValidatorKeys.contains(key);
+            final FhirBundleValidator validator = FhirBundleValidator.builder()
+                    .fhirContext(FhirContext.forR4())
+                    .fhirValidator(initializeFhirValidator(
+                            key.packageIdentity(),
+                            key.basePackageConfiguration(),
+                            key.profileBaseUrl(),
+                            key.igVersion()))
+                    .baseFHIRUrl(key.profileBaseUrl())
+                    .packagePath(key.packageIdentity())
+                    .igVersion(key.igVersion())
+                    .build();
+            final long initializationNumber = validatorInitializationCount.incrementAndGet();
+            LOG.info(
+                    "Initialized FHIR validator: package={}, IG version={}, profileBaseUrl={}, type={}, "
+                            + "initializationCount={}, activeValidations={}",
+                    key.packageIdentity(),
+                    key.igVersion(),
+                    key.profileBaseUrl(),
+                    configured ? "configured" : "dynamic",
+                    initializationNumber,
                     activeValidations.get());
-            return cachedValidator.validator();
+            return new CachedFhirBundleValidator(key, validator, initializationNumber);
         }
 
-        private record ValidatorCacheKey(
+        /**
+         * Returns the configured validator for {@code cacheKey}, or a cached/newly built dynamic one. Returns
+         * {@code null} when the key is not configured and dynamic validators are disabled
+         * ({@code org.techbd.fhir.validator.max-dynamic: 0}).
+         */
+        private FhirBundleValidator getOrCreateFhirBundleValidator(ValidatorCacheKey cacheKey) {
+            final CachedFhirBundleValidator cachedValidator =
+                    validatorRegistry.getOrCreate(cacheKey, this::buildFhirBundleValidator);
+            final var cacheStats = validatorRegistry.dynamicStats();
+            LOG.debug(
+                    "FHIR validator cache lookup: configured={}, dynamicHitCount={}, dynamicMissCount={}, "
+                            + "dynamicEvictionCount={}, initializationCount={}, configuredCount={}, "
+                            + "dynamicCount={}, activeValidations={}",
+                    validatorRegistry.isConfigured(cacheKey),
+                    cacheStats.hitCount(),
+                    cacheStats.missCount(),
+                    cacheStats.evictionCount(),
+                    validatorInitializationCount.get(),
+                    validatorRegistry.configuredCount(),
+                    validatorRegistry.dynamicCount(),
+                    activeValidations.get());
+            return cachedValidator == null ? null : cachedValidator.validator();
+        }
+
+        record ValidatorCacheKey(
                 String packageIdentity,
                 String igVersion,
                 String profileBaseUrl,
@@ -447,7 +488,7 @@ public class OrchestrationEngine {
             }
         }
 
-        private record CachedFhirBundleValidator(
+        record CachedFhirBundleValidator(
                 ValidatorCacheKey key,
                 FhirBundleValidator validator,
                 long initializationOrder) {
@@ -574,14 +615,16 @@ public class OrchestrationEngine {
         public FhirBundleValidator findFhirBundleValidator(String profileUrl) {
             for (final ValidatorCacheKey cacheKey : configuredValidatorKeys) {
                 if (Objects.equals(FHIRUtil.getProfileUrl(cacheKey.profileBaseUrl(), FHIRUtil.BUNDLE), profileUrl)) {
-                    return getOrCreateFhirBundleValidator(cacheKey);
+                    final CachedFhirBundleValidator configured = validatorRegistry.getConfigured(cacheKey);
+                    if (configured != null) {
+                        return configured.validator();
+                    }
                 }
             }
 
             CachedFhirBundleValidator firstMatchingValidator = null;
-            for (final CachedFhirBundleValidator cachedValidator : fhirBundleValidators.asMap().values()) {
-                if (!configuredValidatorKeys.contains(cachedValidator.key())
-                        && Objects.equals(cachedValidator.validator().getFhirProfileUrl(), profileUrl)
+            for (final CachedFhirBundleValidator cachedValidator : validatorRegistry.dynamicValidators()) {
+                if (Objects.equals(cachedValidator.validator().getFhirProfileUrl(), profileUrl)
                         && (firstMatchingValidator == null
                                 || cachedValidator.initializationOrder() < firstMatchingValidator.initializationOrder())) {
                     firstMatchingValidator = cachedValidator;
@@ -690,6 +733,12 @@ public class OrchestrationEngine {
                         final ValidatorCacheKey cacheKey = ValidatorCacheKey.create(
                                 shinNyPackagePath, headerIgVersion, profileBaseUrl, basePackages);
                         bundleValidator = getOrCreateFhirBundleValidator(cacheKey);
+                        if (bundleValidator == null) {
+                            LOG.warn("Dynamic FHIR validators are disabled (max-dynamic=0); ignoring requested IG "
+                                    + "version {} and matching on profile URL {} for interactionId :{}",
+                                    headerIgVersion, profileUrl, interactionId);
+                            bundleValidator = findFhirBundleValidator(profileUrl);
+                        }
                     } else {
                         bundleValidator = findFhirBundleValidator(profileUrl);
                     }
@@ -828,6 +877,8 @@ public class OrchestrationEngine {
             private Tracer tracer;
             private AppLogger appLogger;
             private TemplateLogger LOG;
+            private int maxDynamicValidators = FhirBundleValidatorRegistry.DEFAULT_MAX_DYNAMIC_VALIDATORS;
+            private Duration dynamicValidatorTtl = FhirBundleValidatorRegistry.DEFAULT_DYNAMIC_VALIDATOR_TTL;
 
             public Builder withInteractionId(@NotNull final String interactionId) {
                 this.interactionId = interactionId;
@@ -836,6 +887,20 @@ public class OrchestrationEngine {
 
             public Builder withFhirProfileUrl(@NotNull final String fhirProfileUrl) {
                 this.fhirProfileUrl = fhirProfileUrl;
+                return this;
+            }
+
+            /** Maximum dynamic (header-requested IG version) validators kept at once; 0 disables them. */
+            public Builder withMaxDynamicValidators(final int maxDynamicValidators) {
+                this.maxDynamicValidators = maxDynamicValidators;
+                return this;
+            }
+
+            /** Idle time after which a dynamic validator is evicted; {@code null} keeps the default. */
+            public Builder withDynamicValidatorTtl(final Duration dynamicValidatorTtl) {
+                if (dynamicValidatorTtl != null) {
+                    this.dynamicValidatorTtl = dynamicValidatorTtl;
+                }
                 return this;
             }
 

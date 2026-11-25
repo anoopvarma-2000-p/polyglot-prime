@@ -1,5 +1,6 @@
 package org.techbd.fhir.config;
 
+import java.time.Duration;
 import java.util.Map;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -27,6 +28,28 @@ public class AppConfig {
     private String dataLedgerApiUrl;
     private String validationSeverityLevel;
     private String dataLedgerApiKeySecretName;
+    private FhirSettings fhir = new FhirSettings();
+
+    /** {@code org.techbd.fhir.*} */
+    @Getter
+    @Setter
+    public static class FhirSettings {
+        private ValidatorSettings validator = new ValidatorSettings();
+    }
+
+    /**
+     * {@code org.techbd.fhir.validator.*}: bounds for validators built on demand for an IG version requested in
+     * the request header (validators for the configured SHIN-NY packages are always kept).
+     */
+    @Getter
+    @Setter
+    public static class ValidatorSettings {
+        /** Maximum number of dynamic (header-requested IG version) validators kept at once. 0 disables them. */
+        private int maxDynamic = 2;
+        /** A dynamic validator is evicted after it has not been used for this long. */
+        private Duration dynamicTtl = Duration.ofMinutes(30);
+    }
+
     @Getter
     @Setter
     public static class FhirV4Config {

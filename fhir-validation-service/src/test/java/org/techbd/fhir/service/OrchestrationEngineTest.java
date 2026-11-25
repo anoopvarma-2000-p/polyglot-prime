@@ -350,4 +350,35 @@ class OrchestrationEngineTest extends BaseIgValidationTest {
                         engine.clear(realSession);
                 }
         }
+
+        @Test
+        void testRequestedIgVersionMatchingConfiguredPackageReusesPinnedValidator() throws Exception {
+                String payload = Files.readString(Path.of(
+                                "src/test/resources/org/techbd/ig-examples/shinny-examples/Bundle-AHCHRSNScreeningResponseExample.json"));
+                OrchestrationEngine.HapiValidationEngine hapiEngine = (OrchestrationEngine.HapiValidationEngine) engine
+                                .getValidationEngine(OrchestrationEngine.ValidationEngineIdentifier.HAPI);
+                long initializationsBefore = hapiEngine.getValidatorInitializationCount().get();
+                OrchestrationEngine.OrchestrationSession realSession = null;
+                try {
+                        realSession = engine.session()
+                                        .withPayloads(List.of(payload))
+                                        .withTracer(tracer)
+                                        .withSessionId(UuidUtil.generateUuid())
+                                        .withInteractionId(INTERACTION_ID)
+                                        .withRequestedIgVersion("1.9.4")
+                                        .addHapiValidationEngine()
+                                        .build();
+                        engine.orchestrate(realSession);
+                        List<OrchestrationEngine.ValidationResult> results = engine.getSessions().get(realSession.getSessionId())
+                                        .getValidationResults();
+                        assertThat(results).hasSize(1);
+                        assertThat(results.get(0).getIgVersion()).isEqualTo("1.9.4");
+                        // The configured (pinned) 1.9.4 validator is used: no new validator, nothing in the dynamic pool.
+                        assertThat(hapiEngine.getValidatorInitializationCount().get()).isEqualTo(initializationsBefore);
+                        assertThat(hapiEngine.getDynamicValidatorCount()).isZero();
+                        assertThat(hapiEngine.getConfiguredValidatorCount()).isEqualTo(2);
+                } finally {
+                        engine.clear(realSession);
+                }
+        }
 }
